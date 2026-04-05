@@ -7,6 +7,7 @@ import { usePreferences } from '../hooks/usePreferences';
 import TerminalComponent from '../components/Terminal';
 import TabBar from '../components/TabBar';
 import TouchToolbar from '../components/TouchToolbar';
+import ReconnectBanner from '../components/ReconnectBanner';
 import SettingsPage from './SettingsPage';
 
 interface Session {
@@ -44,7 +45,7 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
 
   const handleStatus = useCallback((_state: string, _message: string) => {}, []);
 
-  const { send, resize } = useWebSocket({
+  const { send, resize, connected, retries, maxRetries, reconnect } = useWebSocket({
     sessionId: activeId,
     token,
     onData: handleData,
@@ -106,6 +107,12 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
           ⚙
         </button>
       </div>
+      <ReconnectBanner
+        connected={connected}
+        retries={retries}
+        maxRetries={maxRetries}
+        onReconnect={reconnect}
+      />
       <div className="flex-1 overflow-hidden p-1">
         <TerminalComponent
           key={`${activeId}-${prefs.theme}-${prefs.fontSize}`}

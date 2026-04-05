@@ -1,0 +1,18 @@
+{
+  "name": "web-terminal",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w packages/server\" \"npm run dev -w packages/client\"",
+    "build": "npm run build -w packages/shared && npm run build -w packages/client && npm run build -w packages/server",
+    "start": "npm start -w packages/server",
+    "test": "npm test --workspaces --if-present",
+    "test:coverage": "npm run test:coverage --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

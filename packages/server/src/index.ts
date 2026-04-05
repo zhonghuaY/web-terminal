@@ -1,7 +1,12 @@
 import express from 'express';
 import type { HealthResponse } from '@web-terminal/shared';
+import { ConfigManager } from './config/config-manager.js';
+import { createAuthRouter } from './auth/auth-router.js';
+import { createJwtMiddleware } from './middleware/jwt-middleware.js';
 
+const configManager = new ConfigManager();
 const app = express();
+
 app.use(express.json());
 
 const startTime = Date.now();
@@ -21,6 +26,12 @@ app.get('/health', (_req, res) => {
   res.json(response);
 });
 
+app.use('/api/auth', createAuthRouter(configManager));
+
+const jwtMiddleware = createJwtMiddleware(configManager.getJwtSecret());
+app.use('/api/sessions', jwtMiddleware);
+app.use('/api/connections', jwtMiddleware);
+
 const port = parseInt(process.env.PORT || '8090', 10);
 const host = process.env.HOST || '0.0.0.0';
 
@@ -28,4 +39,4 @@ app.listen(port, host, () => {
   console.log(`web-terminal server listening on http://${host}:${port}`);
 });
 
-export { app };
+export { app, configManager };

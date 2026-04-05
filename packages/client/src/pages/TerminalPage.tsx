@@ -2,8 +2,10 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { api } from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
+import { useIsMobile } from '../hooks/useIsMobile';
 import TerminalComponent from '../components/Terminal';
 import TabBar from '../components/TabBar';
+import TouchToolbar from '../components/TouchToolbar';
 
 interface Session {
   id: string;
@@ -18,6 +20,7 @@ interface Props {
 }
 
 export default function TerminalPage({ initialSessionId, token, onBackToDashboard }: Props) {
+  const isMobile = useIsMobile();
   const [tabs, setTabs] = useState<Session[]>([]);
   const [activeId, setActiveId] = useState(initialSessionId);
   const termRefs = useRef<Map<string, XTerm>>(new Map());
@@ -101,6 +104,7 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
           termRef={activeTermRef}
         />
       </div>
+      {isMobile && <TouchToolbar onSend={send} />}
     </div>
   );
 }

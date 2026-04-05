@@ -3,9 +3,11 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { api } from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { usePreferences } from '../hooks/usePreferences';
 import TerminalComponent from '../components/Terminal';
 import TabBar from '../components/TabBar';
 import TouchToolbar from '../components/TouchToolbar';
+import SettingsPage from './SettingsPage';
 
 interface Session {
   id: string;
@@ -21,9 +23,10 @@ interface Props {
 
 export default function TerminalPage({ initialSessionId, token, onBackToDashboard }: Props) {
   const isMobile = useIsMobile();
+  const { prefs, update: updatePrefs } = usePreferences();
   const [tabs, setTabs] = useState<Session[]>([]);
   const [activeId, setActiveId] = useState(initialSessionId);
-  const termRefs = useRef<Map<string, XTerm>>(new Map());
+  const [showSettings, setShowSettings] = useState(false);
   const activeTermRef = useRef<XTerm | null>(null);
 
   useEffect(() => {
@@ -39,9 +42,7 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
     activeTermRef.current?.write(data);
   }, []);
 
-  const handleStatus = useCallback((_state: string, _message: string) => {
-    // Could show a status bar
-  }, []);
+  const handleStatus = useCallback((_state: string, _message: string) => {}, []);
 
   const { send, resize } = useWebSocket({
     sessionId: activeId,
@@ -88,23 +89,36 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
 
   return (
     <div className="flex h-screen flex-col bg-gray-950">
-      <TabBar
-        tabs={tabs.map((t) => ({ id: t.id, name: t.name, type: t.type }))}
-        activeId={activeId}
-        onSelect={handleSelectTab}
-        onClose={handleCloseTab}
-        onCreate={handleCreateTab}
-        onBackToDashboard={onBackToDashboard}
-      />
+      <div className="flex items-center">
+        <TabBar
+          tabs={tabs.map((t) => ({ id: t.id, name: t.name, type: t.type }))}
+          activeId={activeId}
+          onSelect={handleSelectTab}
+          onClose={handleCloseTab}
+          onCreate={handleCreateTab}
+          onBackToDashboard={onBackToDashboard}
+        />
+        <button
+          onClick={() => setShowSettings(true)}
+          className="flex-shrink-0 border-b border-gray-800 px-3 py-2 text-sm text-gray-500 hover:text-white"
+          title="Settings"
+        >
+          ⚙
+        </button>
+      </div>
       <div className="flex-1 overflow-hidden p-1">
         <TerminalComponent
-          key={activeId}
+          key={`${activeId}-${prefs.theme}-${prefs.fontSize}`}
           onData={handleTermData}
           onResize={handleResize}
           termRef={activeTermRef}
+          prefs={prefs}
         />
       </div>
       {isMobile && <TouchToolbar onSend={send} />}
+      {showSettings && (
+        <SettingsPage prefs={prefs} onUpdate={updatePrefs} onClose={() => setShowSettings(false)} />
+      )}
     </div>
   );
 }

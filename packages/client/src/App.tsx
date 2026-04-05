@@ -3,6 +3,7 @@ import { useAuth } from './hooks/useAuth';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import DashboardPage from './pages/DashboardPage';
+import TerminalPage from './pages/TerminalPage';
 
 type View = { page: 'dashboard' } | { page: 'terminal'; sessionId: string };
 
@@ -27,21 +28,13 @@ export default function App() {
   }
 
   if (view.page === 'terminal') {
+    const token = localStorage.getItem('wt-token') ?? '';
     return (
-      <div className="flex h-screen flex-col bg-gray-950">
-        <header className="flex items-center border-b border-gray-800 px-4 py-2">
-          <button
-            onClick={() => setView({ page: 'dashboard' })}
-            className="mr-4 rounded-md px-3 py-1.5 text-sm text-gray-400 hover:bg-gray-800 hover:text-white"
-          >
-            ← Dashboard
-          </button>
-          <span className="text-sm text-gray-400">Session: {view.sessionId.slice(0, 8)}...</span>
-        </header>
-        <main className="flex flex-1 items-center justify-center">
-          <p className="text-gray-400">Terminal component coming in Task 7...</p>
-        </main>
-      </div>
+      <TerminalPage
+        initialSessionId={view.sessionId}
+        token={token}
+        onBackToDashboard={() => setView({ page: 'dashboard' })}
+      />
     );
   }
 

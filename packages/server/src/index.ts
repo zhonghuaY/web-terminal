@@ -1,9 +1,12 @@
 import http from 'node:http';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import type { HealthResponse } from '@web-terminal/shared';
 import { ConfigManager } from './config/config-manager.js';
 import { createAuthRouter } from './auth/auth-router.js';
 import { createJwtMiddleware } from './middleware/jwt-middleware.js';
+import { requestLogger } from './middleware/request-logger.js';
 import { SessionManager } from './sessions/session-manager.js';
 import { LocalPtyAdapter } from './sessions/local-pty-adapter.js';
 import { SSHAdapter } from './sessions/ssh-adapter.js';
@@ -11,6 +14,9 @@ import { createSessionRouter } from './sessions/session-router.js';
 import { ConnectionManager } from './connections/connection-manager.js';
 import { createConnectionRouter } from './connections/connection-router.js';
 import { setupWebSocket } from './ws/ws-handler.js';
+import { logger } from './logger.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export function createApp(opts?: { configDir?: string }) {
   const configManager = new ConfigManager(opts?.configDir);
@@ -21,6 +27,7 @@ export function createApp(opts?: { configDir?: string }) {
 
   const app = express();
   app.use(express.json());
+  app.use(requestLogger);
 
   const startTime = Date.now();
 
@@ -45,6 +52,12 @@ export function createApp(opts?: { configDir?: string }) {
   app.use('/api/sessions', jwtMiddleware, createSessionRouter(sessionManager, ptyAdapter));
   app.use('/api/connections', jwtMiddleware, createConnectionRouter(connectionManager));
 
+  const clientDist = path.resolve(__dirname, '../../client/dist');
+  app.use(express.static(clientDist));
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+
   return { app, configManager, sessionManager, ptyAdapter, sshAdapter, connectionManager };
 }
 
@@ -58,6 +71,6 @@ if (process.argv[1] && !process.argv[1].includes('vitest')) {
   const host = process.env.HOST || '0.0.0.0';
 
   server.listen(port, host, () => {
-    console.log(`web-terminal server listening on http://${host}:${port}`);
+    logger.info({ port, host }, `web-terminal server listening on http://${host}:${port}`);
   });
 }

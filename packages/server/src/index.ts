@@ -6,13 +6,18 @@ import { createAuthRouter } from './auth/auth-router.js';
 import { createJwtMiddleware } from './middleware/jwt-middleware.js';
 import { SessionManager } from './sessions/session-manager.js';
 import { LocalPtyAdapter } from './sessions/local-pty-adapter.js';
+import { SSHAdapter } from './sessions/ssh-adapter.js';
 import { createSessionRouter } from './sessions/session-router.js';
+import { ConnectionManager } from './connections/connection-manager.js';
+import { createConnectionRouter } from './connections/connection-router.js';
 import { setupWebSocket } from './ws/ws-handler.js';
 
 export function createApp(opts?: { configDir?: string }) {
   const configManager = new ConfigManager(opts?.configDir);
   const sessionManager = new SessionManager(opts?.configDir);
   const ptyAdapter = new LocalPtyAdapter();
+  const sshAdapter = new SSHAdapter();
+  const connectionManager = new ConnectionManager(opts?.configDir);
 
   const app = express();
   app.use(express.json());
@@ -38,15 +43,16 @@ export function createApp(opts?: { configDir?: string }) {
 
   const jwtMiddleware = createJwtMiddleware(configManager.getJwtSecret());
   app.use('/api/sessions', jwtMiddleware, createSessionRouter(sessionManager, ptyAdapter));
+  app.use('/api/connections', jwtMiddleware, createConnectionRouter(connectionManager));
 
-  return { app, configManager, sessionManager, ptyAdapter };
+  return { app, configManager, sessionManager, ptyAdapter, sshAdapter, connectionManager };
 }
 
 if (process.argv[1] && !process.argv[1].includes('vitest')) {
-  const { app, configManager, sessionManager, ptyAdapter } = createApp();
+  const { app, configManager, sessionManager, ptyAdapter, sshAdapter, connectionManager } = createApp();
   const server = http.createServer(app);
 
-  setupWebSocket(server, configManager.getJwtSecret(), sessionManager, ptyAdapter);
+  setupWebSocket(server, configManager.getJwtSecret(), sessionManager, ptyAdapter, sshAdapter, connectionManager);
 
   const port = parseInt(process.env.PORT || '8090', 10);
   const host = process.env.HOST || '0.0.0.0';

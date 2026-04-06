@@ -70,13 +70,10 @@ function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onC
   return (
     <div
       style={{
-        width: '100%',
-        height: '100%',
-        position: visible ? 'relative' : 'absolute',
+        position: 'absolute',
+        inset: 0,
         visibility: visible ? 'visible' : 'hidden',
         zIndex: visible ? 1 : 0,
-        top: 0,
-        left: 0,
       }}
     >
       <TerminalComponent

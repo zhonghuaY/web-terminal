@@ -85,12 +85,13 @@ function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, pref
       }
     });
 
-    fitAddon.fit();
     fitAddonRef.current = fitAddon;
     searchAddonRef.current = searchAddon;
     termRef.current = term;
 
+    fitAddon.fit();
     onResizeRef.current(term.cols, term.rows);
+    const initialFitTimer = setTimeout(() => fitAddon.fit(), 100);
 
     term.onData((data) => onDataRef.current(data));
     term.onResize(({ cols, rows }) => onResizeRef.current(cols, rows));
@@ -110,6 +111,7 @@ function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, pref
     resizeObserver.observe(containerRef.current);
 
     return () => {
+      clearTimeout(initialFitTimer);
       document.removeEventListener('keydown', handleKeyboard);
       resizeObserver.disconnect();
       term.dispose();
@@ -119,9 +121,10 @@ function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, pref
 
   useEffect(() => {
     if (visible && fitAddonRef.current) {
-      requestAnimationFrame(() => {
-        fitAddonRef.current?.fit();
-      });
+      const fit = () => fitAddonRef.current?.fit();
+      requestAnimationFrame(fit);
+      const timer = setTimeout(fit, 50);
+      return () => clearTimeout(timer);
     }
   }, [visible]);
 

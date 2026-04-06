@@ -6,6 +6,7 @@ interface Session {
   name: string;
   createdAt?: string;
   lastAccessed: string;
+  restorable?: boolean;
 }
 
 interface Props {
@@ -47,15 +48,29 @@ export default function SessionList({ sessions, onResume, onDelete, onRename }: 
           className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900 px-4 py-3"
         >
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <span
-              className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-                session.type === 'local'
-                  ? 'bg-blue-500/10 text-blue-400'
-                  : 'bg-emerald-500/10 text-emerald-400'
-              }`}
-            >
-              {session.type}
-            </span>
+            <div className="flex shrink-0 flex-col items-center gap-1">
+              <span
+                className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                  session.type === 'local'
+                    ? 'bg-blue-500/10 text-blue-400'
+                    : 'bg-emerald-500/10 text-emerald-400'
+                }`}
+              >
+                {session.type}
+              </span>
+              {session.restorable !== undefined && (
+                <span
+                  className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
+                    session.restorable
+                      ? 'bg-green-500/10 text-green-400'
+                      : 'bg-gray-500/10 text-gray-500'
+                  }`}
+                  title={session.restorable ? 'Session is alive and can be restored' : 'Session is no longer active'}
+                >
+                  {session.restorable ? 'live' : 'ended'}
+                </span>
+              )}
+            </div>
             <div className="min-w-0 flex-1">
               {editing === session.id ? (
                 <input

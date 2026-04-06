@@ -6,6 +6,9 @@ export interface UserPreferences {
   theme: string;
   fontSize: number;
   fontFamily: string;
+  lastView?: 'dashboard' | 'terminal';
+  lastSessionId?: string;
+  lastActiveTabIds?: string[];
 }
 
 const DEFAULTS: UserPreferences = {
@@ -49,6 +52,9 @@ export class PreferencesManager {
     if (patch.theme !== undefined) this.prefs.theme = patch.theme;
     if (patch.fontSize !== undefined) this.prefs.fontSize = patch.fontSize;
     if (patch.fontFamily !== undefined) this.prefs.fontFamily = patch.fontFamily;
+    if (patch.lastView !== undefined) this.prefs.lastView = patch.lastView;
+    if (patch.lastSessionId !== undefined) this.prefs.lastSessionId = patch.lastSessionId;
+    if (patch.lastActiveTabIds !== undefined) this.prefs.lastActiveTabIds = patch.lastActiveTabIds;
     this.save();
     return { ...this.prefs };
   }

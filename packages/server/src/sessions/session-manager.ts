@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { execSync } from 'node:child_process';
 import { v4 as uuidv4 } from 'uuid';
 import type { Session } from '@web-terminal/shared';
 
@@ -20,6 +21,36 @@ export class SessionManager {
     }
 
     this.load();
+    this.markRestorableSessions();
+  }
+
+  private markRestorableSessions(): void {
+    const staleIds: string[] = [];
+    const staleThreshold = 7 * 24 * 60 * 60 * 1000;
+
+    for (const [id, session] of this.sessions) {
+      if (session.type === 'local') {
+        const tmuxName = session.tmuxSession ?? `wt-${id}`;
+        try {
+          execSync(`tmux has-session -t ${tmuxName} 2>/dev/null`);
+          session.restorable = true;
+        } catch {
+          const age = Date.now() - new Date(session.lastAccessed).getTime();
+          if (age > staleThreshold) {
+            staleIds.push(id);
+          }
+          session.restorable = false;
+        }
+      } else if (session.type === 'ssh') {
+        session.restorable = !!session.sshConnectionId;
+      }
+    }
+
+    for (const id of staleIds) {
+      this.sessions.delete(id);
+    }
+
+    this.save();
   }
 
   create(type: 'local' | 'ssh', name?: string, sshConnectionId?: string, tmuxSession?: string): Session {

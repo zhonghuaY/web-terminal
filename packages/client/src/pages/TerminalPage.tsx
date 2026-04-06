@@ -14,6 +14,7 @@ interface Session {
   id: string;
   type: 'local' | 'ssh';
   name: string;
+  restorable?: boolean;
 }
 
 interface Props {
@@ -35,18 +36,38 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
 
   useEffect(() => {
     api.get<Session[]>('/api/sessions').then((sessions) => {
-      setTabs(sessions);
-      if (!sessions.find((s) => s.id === initialSessionId) && sessions.length > 0) {
-        setActiveId(sessions[0].id);
-      }
+      api.get<{ lastActiveTabIds?: string[] }>('/api/preferences').then((prefs) => {
+        const savedIds = prefs.lastActiveTabIds ?? [];
+        let filtered: Session[];
+        if (savedIds.length > 0) {
+          const idSet = new Set(savedIds);
+          filtered = sessions.filter((s) => idSet.has(s.id) && s.restorable !== false);
+          filtered.sort((a, b) => savedIds.indexOf(a.id) - savedIds.indexOf(b.id));
+        } else {
+          filtered = sessions;
+        }
+        if (filtered.length === 0) {
+          filtered = sessions.filter((s) => s.restorable !== false).slice(0, 1);
+        }
+        setTabs(filtered);
+        if (!filtered.find((s) => s.id === initialSessionId) && filtered.length > 0) {
+          setActiveId(filtered[0].id);
+        }
+      }).catch(() => {
+        setTabs(sessions);
+        if (!sessions.find((s) => s.id === initialSessionId) && sessions.length > 0) {
+          setActiveId(sessions[0].id);
+        }
+      });
     });
   }, [initialSessionId]);
 
   useEffect(() => {
     if (activeId) {
-      api.put('/api/preferences', { lastView: 'terminal', lastSessionId: activeId }).catch(() => {});
+      const tabIds = tabs.map((t) => t.id);
+      api.put('/api/preferences', { lastView: 'terminal', lastSessionId: activeId, lastActiveTabIds: tabIds }).catch(() => {});
     }
-  }, [activeId]);
+  }, [activeId, tabs]);
 
   const handleSelectTab = useCallback((id: string) => {
     setActiveId(id);

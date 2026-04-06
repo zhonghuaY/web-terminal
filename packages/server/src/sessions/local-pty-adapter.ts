@@ -199,7 +199,9 @@ export class LocalPtyAdapter extends EventEmitter {
             `cat /proc/${childPid}/cmdline 2>/dev/null | tr '\\0' ' '`,
           );
           const parts = cmdline.trim().split(/\s+/);
-          if (parts[0]?.includes('tmux') && parts.includes('attach-session') || parts.includes('a')) {
+          const isTmux = parts[0]?.includes('tmux');
+          const isAttach = parts.includes('attach-session') || parts.includes('attach') || parts.includes('a');
+          if (isTmux && isAttach) {
             const tIdx = parts.indexOf('-t');
             if (tIdx >= 0 && parts[tIdx + 1]) {
               return parts[tIdx + 1];

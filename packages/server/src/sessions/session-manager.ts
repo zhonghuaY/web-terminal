@@ -22,15 +22,16 @@ export class SessionManager {
     this.load();
   }
 
-  create(type: 'local' | 'ssh', name?: string, sshConnectionId?: string): Session {
+  create(type: 'local' | 'ssh', name?: string, sshConnectionId?: string, tmuxSession?: string): Session {
     this.counter++;
     const session: Session = {
       id: uuidv4(),
       type,
-      name: name ?? `Terminal ${this.counter}`,
+      name: name ?? (tmuxSession ? `tmux: ${tmuxSession}` : `Terminal ${this.counter}`),
       createdAt: new Date().toISOString(),
       lastAccessed: new Date().toISOString(),
       sshConnectionId,
+      tmuxSession,
     };
     this.sessions.set(session.id, session);
     this.save();

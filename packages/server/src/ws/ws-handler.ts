@@ -48,7 +48,9 @@ export function setupWebSocket(
 
     if (session.type === 'local') {
       if (!ptyAdapter.isAttached(sessionId)) {
-        if (ptyAdapter.tmuxSessionExists(sessionId)) {
+        if (session.tmuxSession) {
+          ptyAdapter.attachExternal(sessionId, session.tmuxSession);
+        } else if (ptyAdapter.tmuxSessionExists(sessionId)) {
           ptyAdapter.attach(sessionId);
         } else {
           ptyAdapter.createSession(sessionId);
@@ -106,10 +108,10 @@ export function setupWebSocket(
 
     ws.on('close', () => {
       clientSessions.delete(ws);
-      if (session.type === 'local') {
+      const hasOtherClient = [...clientSessions.values()].some((sid) => sid === sessionId);
+      if (session.type === 'local' && !hasOtherClient) {
         ptyAdapter.detach(sessionId);
       }
-      // SSH sessions stay connected for reconnect
     });
   });
 

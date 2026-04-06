@@ -13,19 +13,27 @@ export function createSessionRouter(
     res.json(sessionManager.list());
   });
 
+  router.get('/tmux-list', (_req: Request, res: Response) => {
+    res.json(ptyAdapter.listTmuxSessions());
+  });
+
   router.post('/', (req: Request, res: Response) => {
-    const { type, name, sshConnectionId } = req.body as CreateSessionRequest;
+    const { type, name, sshConnectionId, tmuxSession } = req.body as CreateSessionRequest;
 
     if (!type || !['local', 'ssh'].includes(type)) {
       res.status(400).json({ error: 'Invalid session type' });
       return;
     }
 
-    const session = sessionManager.create(type, name, sshConnectionId);
+    const session = sessionManager.create(type, name, sshConnectionId, tmuxSession);
 
     if (type === 'local') {
       try {
-        ptyAdapter.createSession(session.id);
+        if (tmuxSession) {
+          ptyAdapter.attachExternal(session.id, tmuxSession);
+        } else {
+          ptyAdapter.createSession(session.id);
+        }
       } catch (err) {
         sessionManager.delete(session.id);
         res.status(500).json({ error: 'Failed to create PTY session' });

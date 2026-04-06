@@ -5,6 +5,7 @@ export interface Session {
   createdAt: string;
   lastAccessed: string;
   sshConnectionId?: string;
+  tmuxSession?: string;
 }
 
 export interface SSHConnection {
@@ -65,6 +66,14 @@ export interface CreateSessionRequest {
   name?: string;
   sshConnectionId?: string;
   sshPassword?: string;
+  tmuxSession?: string;
+}
+
+export interface TmuxSessionInfo {
+  name: string;
+  windows: number;
+  attached: boolean;
+  created: string;
 }
 
 export interface CreateConnectionRequest {

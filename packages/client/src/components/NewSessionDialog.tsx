@@ -1,4 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
+import type { TmuxSessionInfo } from '@web-terminal/shared';
+import { api } from '../api/client';
 
 interface SSHConnection {
   id: string;
@@ -9,23 +11,51 @@ interface SSHConnection {
 
 interface Props {
   connections: SSHConnection[];
-  onCreate: (type: 'local' | 'ssh', name?: string, sshConnectionId?: string) => Promise<void>;
+  onCreate: (type: 'local' | 'ssh', name?: string, sshConnectionId?: string, tmuxSession?: string) => Promise<void>;
   onClose: () => void;
 }
 
 export default function NewSessionDialog({ connections, onCreate, onClose }: Props) {
   const [type, setType] = useState<'local' | 'ssh'>('local');
+  const [localMode, setLocalMode] = useState<'new' | 'tmux'>('new');
   const [name, setName] = useState('');
   const [sshConnectionId, setSshConnectionId] = useState('');
+  const [tmuxSessions, setTmuxSessions] = useState<TmuxSessionInfo[]>([]);
+  const [selectedTmux, setSelectedTmux] = useState('');
+  const [tmuxLoading, setTmuxLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (type === 'local') {
+      setTmuxLoading(true);
+      api.get<TmuxSessionInfo[]>('/api/sessions/tmux-list')
+        .then(setTmuxSessions)
+        .catch(() => setTmuxSessions([]))
+        .finally(() => setTmuxLoading(false));
+    }
+  }, [type]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      await onCreate(type, name || undefined, type === 'ssh' ? sshConnectionId : undefined);
+      const tmux = type === 'local' && localMode === 'tmux' ? selectedTmux : undefined;
+      await onCreate(
+        type,
+        name || undefined,
+        type === 'ssh' ? sshConnectionId : undefined,
+        tmux,
+      );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const formatDate = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleString();
+    } catch {
+      return iso;
     }
   };
 
@@ -59,6 +89,58 @@ export default function NewSessionDialog({ connections, onCreate, onClose }: Pro
               SSH Connection
             </button>
           </div>
+
+          {type === 'local' && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setLocalMode('new'); setSelectedTmux(''); }}
+                className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium ${
+                  localMode === 'new'
+                    ? 'bg-gray-700 text-white ring-1 ring-blue-500'
+                    : 'bg-gray-800 text-gray-400 hover:text-white'
+                }`}
+              >
+                New Shell
+              </button>
+              <button
+                type="button"
+                onClick={() => setLocalMode('tmux')}
+                className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium ${
+                  localMode === 'tmux'
+                    ? 'bg-gray-700 text-white ring-1 ring-blue-500'
+                    : 'bg-gray-800 text-gray-400 hover:text-white'
+                }`}
+              >
+                Attach tmux Session
+              </button>
+            </div>
+          )}
+
+          {type === 'local' && localMode === 'tmux' && (
+            <div>
+              <label className="mb-1 block text-sm font-medium text-gray-300">tmux Session</label>
+              {tmuxLoading ? (
+                <p className="text-sm text-gray-500">Loading...</p>
+              ) : tmuxSessions.length === 0 ? (
+                <p className="text-sm text-gray-500">No tmux sessions found on this server.</p>
+              ) : (
+                <select
+                  value={selectedTmux}
+                  onChange={(e) => setSelectedTmux(e.target.value)}
+                  required
+                  className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">Select a tmux session...</option>
+                  {tmuxSessions.map((s) => (
+                    <option key={s.name} value={s.name}>
+                      {s.name} — {s.windows} win{s.windows > 1 ? 's' : ''}{s.attached ? ' (attached)' : ''} · {formatDate(s.created)}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
 
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-300">Session Name</label>
@@ -100,10 +182,10 @@ export default function NewSessionDialog({ connections, onCreate, onClose }: Pro
             </button>
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (type === 'local' && localMode === 'tmux' && !selectedTmux)}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? 'Creating...' : 'Create'}
+              {loading ? 'Creating...' : localMode === 'tmux' && type === 'local' ? 'Attach' : 'Create'}
             </button>
           </div>
         </form>

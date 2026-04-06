@@ -1,8 +1,7 @@
 import { spawn as ptySpawn, type IPty } from 'node-pty';
-import { execSync, exec } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-
-const DEFAULT_SHELL = process.env.SHELL || '/bin/bash';
+import type { TmuxSessionInfo } from '@web-terminal/shared';
 
 export interface PtyEvents {
   data: (data: string) => void;
@@ -96,6 +95,53 @@ export class LocalPtyAdapter extends EventEmitter {
     } catch {
       return false;
     }
+  }
+
+  listTmuxSessions(): TmuxSessionInfo[] {
+    try {
+      const raw = execSync(
+        'tmux list-sessions -F "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_created}" 2>/dev/null',
+        { encoding: 'utf8' },
+      );
+      return raw
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => {
+          const [name, windows, attached, created] = line.split('\t');
+          return {
+            name,
+            windows: parseInt(windows, 10) || 1,
+            attached: attached === '1',
+            created: new Date(parseInt(created, 10) * 1000).toISOString(),
+          };
+        });
+    } catch {
+      return [];
+    }
+  }
+
+  attachExternal(sessionId: string, tmuxName: string, cols = 80, rows = 24): void {
+    if (this.ptyProcesses.has(sessionId)) return;
+
+    const pty = ptySpawn('tmux', ['attach-session', '-t', tmuxName], {
+      name: 'xterm-256color',
+      cols,
+      rows,
+      cwd: process.env.HOME,
+      env: process.env as Record<string, string>,
+    });
+
+    pty.onData((data: string) => {
+      this.emit('data', sessionId, data);
+    });
+
+    pty.onExit(({ exitCode }: { exitCode: number }) => {
+      this.ptyProcesses.delete(sessionId);
+      this.emit('exit', sessionId, exitCode);
+    });
+
+    this.ptyProcesses.set(sessionId, pty);
   }
 
   destroyAll(): void {

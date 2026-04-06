@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 interface Tab {
   id: string;
   name: string;
@@ -13,7 +15,7 @@ interface Props {
   onBackToDashboard: () => void;
 }
 
-export default function TabBar({ tabs, activeId, onSelect, onClose, onCreate, onBackToDashboard }: Props) {
+export default memo(function TabBar({ tabs, activeId, onSelect, onClose, onCreate, onBackToDashboard }: Props) {
   return (
     <div className="flex items-center border-b border-gray-800 bg-gray-950">
       <button
@@ -63,4 +65,4 @@ export default function TabBar({ tabs, activeId, onSelect, onClose, onCreate, on
       </button>
     </div>
   );
-}
+});

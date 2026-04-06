@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 
 interface Props {
   onNewLocal: () => void;
@@ -17,7 +17,7 @@ interface MenuDef {
   items: { label: string; shortcut?: string; action: () => void; disabled?: boolean; divider?: boolean }[];
 }
 
-export default function MenuBar({
+export default memo(function MenuBar({
   onNewLocal,
   onNewSSH,
   onBackToDashboard,
@@ -117,4 +117,4 @@ export default function MenuBar({
       </div>
     </div>
   );
-}
+});

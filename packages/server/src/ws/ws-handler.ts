@@ -7,6 +7,8 @@ import { LocalPtyAdapter } from '../sessions/local-pty-adapter.js';
 import { SSHAdapter } from '../sessions/ssh-adapter.js';
 import { ConnectionManager } from '../connections/connection-manager.js';
 
+const OUTPUT_BUFFER_INTERVAL_MS = 8;
+
 export function setupWebSocket(
   server: Server,
   jwtSecret: string,
@@ -19,6 +21,74 @@ export function setupWebSocket(
   const authService = new AuthService(jwtSecret);
 
   const clientSessions = new Map<WebSocket, string>();
+  const sessionClients = new Map<string, Set<WebSocket>>();
+
+  const outputBuffers = new Map<string, string[]>();
+  let flushTimer: ReturnType<typeof setInterval> | null = null;
+
+  function addClient(ws: WebSocket, sessionId: string) {
+    clientSessions.set(ws, sessionId);
+    let clients = sessionClients.get(sessionId);
+    if (!clients) {
+      clients = new Set();
+      sessionClients.set(sessionId, clients);
+    }
+    clients.add(ws);
+  }
+
+  function removeClient(ws: WebSocket) {
+    const sessionId = clientSessions.get(ws);
+    clientSessions.delete(ws);
+    if (sessionId) {
+      const clients = sessionClients.get(sessionId);
+      if (clients) {
+        clients.delete(ws);
+        if (clients.size === 0) sessionClients.delete(sessionId);
+      }
+    }
+    return sessionId;
+  }
+
+  function broadcastToSession(sessionId: string, data: string) {
+    const clients = sessionClients.get(sessionId);
+    if (!clients) return;
+    const msg: WsServerMessage = { type: 'output', data };
+    const payload = JSON.stringify(msg);
+    for (const ws of clients) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(payload);
+      }
+    }
+  }
+
+  function enqueueOutput(sessionId: string, data: string) {
+    let buffer = outputBuffers.get(sessionId);
+    if (!buffer) {
+      buffer = [];
+      outputBuffers.set(sessionId, buffer);
+    }
+    buffer.push(data);
+  }
+
+  function flushOutputBuffers() {
+    for (const [sessionId, chunks] of outputBuffers) {
+      if (chunks.length === 0) continue;
+      const merged = chunks.join('');
+      chunks.length = 0;
+      broadcastToSession(sessionId, merged);
+    }
+  }
+
+  function ensureFlushTimer() {
+    if (flushTimer) return;
+    flushTimer = setInterval(() => {
+      flushOutputBuffers();
+      if (outputBuffers.size === 0 && flushTimer) {
+        clearInterval(flushTimer);
+        flushTimer = null;
+      }
+    }, OUTPUT_BUFFER_INTERVAL_MS);
+  }
 
   wss.on('connection', async (ws, req) => {
     const url = new URL(req.url ?? '', `http://${req.headers.host}`);
@@ -75,13 +145,16 @@ export function setupWebSocket(
       }
     }
 
-    for (const [existingWs, sid] of clientSessions) {
-      if (sid === sessionId && existingWs !== ws && existingWs.readyState === WebSocket.OPEN) {
-        existingWs.close(4010, 'Replaced by new connection');
+    const existingClients = sessionClients.get(sessionId);
+    if (existingClients) {
+      for (const existingWs of existingClients) {
+        if (existingWs !== ws && existingWs.readyState === WebSocket.OPEN) {
+          existingWs.close(4010, 'Replaced by new connection');
+        }
       }
     }
 
-    clientSessions.set(ws, sessionId);
+    addClient(ws, sessionId);
     sessionManager.touch(sessionId);
     sendStatus(ws, 'connected', `Attached to session ${session.name}`);
 
@@ -107,35 +180,32 @@ export function setupWebSocket(
     });
 
     ws.on('close', () => {
-      clientSessions.delete(ws);
-      const hasOtherClient = [...clientSessions.values()].some((sid) => sid === sessionId);
-      if (session.type === 'local' && !hasOtherClient) {
-        ptyAdapter.detach(sessionId);
+      const sid = removeClient(ws);
+      if (sid && session.type === 'local') {
+        const remaining = sessionClients.get(sid);
+        if (!remaining || remaining.size === 0) {
+          ptyAdapter.detach(sid);
+          outputBuffers.delete(sid);
+        }
       }
     });
   });
 
   ptyAdapter.on('data', (sessionId: string, data: string) => {
-    for (const [ws, sid] of clientSessions) {
-      if (sid === sessionId && ws.readyState === WebSocket.OPEN) {
-        const msg: WsServerMessage = { type: 'output', data };
-        ws.send(JSON.stringify(msg));
-      }
-    }
+    enqueueOutput(sessionId, data);
+    ensureFlushTimer();
   });
 
   sshAdapter.on('data', (sessionId: string, data: string) => {
-    for (const [ws, sid] of clientSessions) {
-      if (sid === sessionId && ws.readyState === WebSocket.OPEN) {
-        const msg: WsServerMessage = { type: 'output', data };
-        ws.send(JSON.stringify(msg));
-      }
-    }
+    enqueueOutput(sessionId, data);
+    ensureFlushTimer();
   });
 
   sshAdapter.on('exit', (sessionId: string, _code: number) => {
-    for (const [ws, sid] of clientSessions) {
-      if (sid === sessionId && ws.readyState === WebSocket.OPEN) {
+    const clients = sessionClients.get(sessionId);
+    if (!clients) return;
+    for (const ws of clients) {
+      if (ws.readyState === WebSocket.OPEN) {
         sendStatus(ws, 'disconnected', 'SSH session ended');
         ws.close(1000, 'SSH session ended');
       }
@@ -143,8 +213,11 @@ export function setupWebSocket(
   });
 
   ptyAdapter.on('exit', (sessionId: string, _code: number) => {
-    for (const [ws, sid] of clientSessions) {
-      if (sid === sessionId && ws.readyState === WebSocket.OPEN) {
+    outputBuffers.delete(sessionId);
+    const clients = sessionClients.get(sessionId);
+    if (!clients) return;
+    for (const ws of clients) {
+      if (ws.readyState === WebSocket.OPEN) {
         sendStatus(ws, 'disconnected', 'Session ended');
         ws.close(1000, 'Session ended');
       }

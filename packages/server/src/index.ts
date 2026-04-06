@@ -2,6 +2,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
+import compression from 'compression';
 import type { HealthResponse } from '@web-terminal/shared';
 import { ConfigManager } from './config/config-manager.js';
 import { createAuthRouter } from './auth/auth-router.js';
@@ -29,6 +30,7 @@ export function createApp(opts?: { configDir?: string }) {
   const preferencesManager = new PreferencesManager(opts?.configDir);
 
   const app = express();
+  app.use(compression());
   app.use(express.json());
   app.use(requestLogger);
 
@@ -57,8 +59,13 @@ export function createApp(opts?: { configDir?: string }) {
   app.use('/api/preferences', jwtMiddleware, createPreferencesRouter(preferencesManager));
 
   const clientDist = path.resolve(__dirname, '../../client/dist');
-  app.use(express.static(clientDist));
+  app.use(express.static(clientDist, {
+    maxAge: '7d',
+    immutable: true,
+    etag: true,
+  }));
   app.get('*', (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 

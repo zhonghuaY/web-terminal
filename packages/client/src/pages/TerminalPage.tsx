@@ -5,6 +5,7 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { usePreferences } from '../hooks/usePreferences';
 import TerminalComponent from '../components/Terminal';
+import MenuBar from '../components/MenuBar';
 import TabBar from '../components/TabBar';
 import TouchToolbar from '../components/TouchToolbar';
 import ReconnectBanner from '../components/ReconnectBanner';
@@ -88,8 +89,25 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
     setActiveId(session.id);
   }, []);
 
+  const activeSession = tabs.find((t) => t.id === activeId);
+
+  const handleNewSSH = useCallback(() => {
+    onBackToDashboard();
+  }, [onBackToDashboard]);
+
   return (
     <div className="flex h-screen flex-col bg-gray-950">
+      <MenuBar
+        onNewLocal={handleCreateTab}
+        onNewSSH={handleNewSSH}
+        onBackToDashboard={onBackToDashboard}
+        onSettings={() => setShowSettings(true)}
+        onCloseTab={() => activeId && handleCloseTab(activeId)}
+        onReconnect={reconnect}
+        connected={connected}
+        sessionName={activeSession?.name ?? ''}
+        sessionType={activeSession?.type ?? 'local'}
+      />
       <div className="flex items-center">
         <TabBar
           tabs={tabs.map((t) => ({ id: t.id, name: t.name, type: t.type }))}
@@ -99,13 +117,6 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
           onCreate={handleCreateTab}
           onBackToDashboard={onBackToDashboard}
         />
-        <button
-          onClick={() => setShowSettings(true)}
-          className="flex-shrink-0 border-b border-gray-800 px-3 py-2 text-sm text-gray-500 hover:text-white"
-          title="Settings"
-        >
-          ⚙
-        </button>
       </div>
       <ReconnectBanner
         connected={connected}

@@ -1,5 +1,6 @@
 import { spawn as ptySpawn, type IPty } from 'node-pty';
 import { exec, execSync } from 'node:child_process';
+import fs from 'node:fs';
 import { EventEmitter } from 'node:events';
 import { promisify } from 'node:util';
 import type { TmuxSessionInfo } from '@web-terminal/shared';
@@ -14,13 +15,14 @@ export interface PtyEvents {
 export class LocalPtyAdapter extends EventEmitter {
   private ptyProcesses = new Map<string, IPty>();
 
-  createSession(sessionId: string, cols = 80, rows = 24): void {
+  createSession(sessionId: string, cols = 80, rows = 24, startDir?: string): void {
     const tmuxName = `wt-${sessionId}`;
 
     try {
       execSync(`tmux has-session -t ${tmuxName} 2>/dev/null`);
     } catch {
-      execSync(`tmux new-session -d -s ${tmuxName} -x ${cols} -y ${rows}`);
+      const cwd = startDir && fs.existsSync(startDir) ? startDir : process.env.HOME ?? '/';
+      execSync(`tmux new-session -d -s ${tmuxName} -x ${cols} -y ${rows} -c '${cwd.replace(/'/g, "'\\''")}'`);
     }
 
     this.enableTmuxTitlePassthrough(tmuxName);
@@ -161,6 +163,18 @@ export class LocalPtyAdapter extends EventEmitter {
     try {
       const { stdout } = await execAsync(
         `tmux display-message -p -t ${tmuxName} '#{pane_title}' 2>/dev/null`,
+      );
+      return stdout.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async getPaneCwd(sessionId: string): Promise<string | null> {
+    const tmuxName = `wt-${sessionId}`;
+    try {
+      const { stdout } = await execAsync(
+        `tmux display-message -p -t ${tmuxName} '#{pane_current_path}' 2>/dev/null`,
       );
       return stdout.trim() || null;
     } catch {

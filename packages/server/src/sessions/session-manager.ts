@@ -101,6 +101,14 @@ export class SessionManager {
     }
   }
 
+  setCwd(id: string, cwd: string): void {
+    const session = this.sessions.get(id);
+    if (session && session.lastCwd !== cwd) {
+      session.lastCwd = cwd;
+      this.save();
+    }
+  }
+
   delete(id: string): boolean {
     const deleted = this.sessions.delete(id);
     if (deleted) this.save();

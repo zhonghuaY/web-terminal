@@ -8,6 +8,7 @@ export class SSHAdapter extends EventEmitter {
   private clients = new Map<string, Client>();
   private channels = new Map<string, ClientChannel>();
   private titleBuffers = new Map<string, string>();
+  private cwdBuffers = new Map<string, string>();
 
   async createSession(
     sessionId: string,
@@ -35,6 +36,7 @@ export class SSHAdapter extends EventEmitter {
             channel.on('data', (data: Buffer) => {
               const str = data.toString();
               this.extractOscTitle(sessionId, str);
+              this.extractOscCwd(sessionId, str);
               this.emit('data', sessionId, str);
             });
 
@@ -122,10 +124,29 @@ export class SSHAdapter extends EventEmitter {
     }
   }
 
+  private extractOscCwd(sessionId: string, data: string): void {
+    let buf = (this.cwdBuffers.get(sessionId) ?? '') + data;
+    const OSC7_RE = /\x1b\]7;file:\/\/[^/]*([^\x07\x1b]*?)(?:\x07|\x1b\\)/g;
+    let match: RegExpExecArray | null;
+    while ((match = OSC7_RE.exec(buf)) !== null) {
+      const cwd = decodeURIComponent(match[1].trim());
+      if (cwd) {
+        this.emit('cwdChange', sessionId, cwd);
+      }
+    }
+    const lastOsc = buf.lastIndexOf('\x1b]7;');
+    if (lastOsc >= 0 && !buf.slice(lastOsc).includes('\x07') && !buf.slice(lastOsc).includes('\x1b\\')) {
+      this.cwdBuffers.set(sessionId, buf.slice(lastOsc));
+    } else {
+      this.cwdBuffers.delete(sessionId);
+    }
+  }
+
   private cleanup(sessionId: string): void {
     this.channels.delete(sessionId);
     this.clients.delete(sessionId);
     this.titleBuffers.delete(sessionId);
+    this.cwdBuffers.delete(sessionId);
   }
 
   destroyAll(): void {

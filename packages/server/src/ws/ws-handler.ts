@@ -22,6 +22,7 @@ export function setupWebSocket(
 
   const clientSessions = new Map<WebSocket, string>();
   const sessionClients = new Map<string, Set<WebSocket>>();
+  const sshConnecting = new Map<string, Promise<void>>();
 
   const outputBuffers = new Map<string, string[]>();
   let flushTimer: ReturnType<typeof setInterval> | null = null;
@@ -128,19 +129,34 @@ export function setupWebSocket(
       }
     } else if (session.type === 'ssh') {
       if (!sshAdapter.isConnected(sessionId) && session.sshConnectionId) {
-        const conn = connectionManager.get(session.sshConnectionId);
-        if (!conn) {
-          sendStatus(ws, 'error', 'SSH connection config not found');
-          ws.close(4005, 'Connection not found');
-          return;
-        }
-        const sshPassword = url.searchParams.get('sshPassword') ?? undefined;
-        try {
-          await sshAdapter.createSession(sessionId, conn, sshPassword);
-        } catch (err) {
-          sendStatus(ws, 'error', `SSH connection failed: ${(err as Error).message}`);
-          ws.close(4006, 'SSH connection failed');
-          return;
+        const existing = sshConnecting.get(sessionId);
+        if (existing) {
+          try {
+            await existing;
+          } catch (err) {
+            sendStatus(ws, 'error', `SSH connection failed: ${(err as Error).message}`);
+            ws.close(4006, 'SSH connection failed');
+            return;
+          }
+        } else {
+          const conn = connectionManager.get(session.sshConnectionId);
+          if (!conn) {
+            sendStatus(ws, 'error', 'SSH connection config not found');
+            ws.close(4005, 'Connection not found');
+            return;
+          }
+          const sshPassword = url.searchParams.get('sshPassword') ?? undefined;
+          const connectPromise = sshAdapter.createSession(sessionId, conn, sshPassword);
+          sshConnecting.set(sessionId, connectPromise);
+          try {
+            await connectPromise;
+          } catch (err) {
+            sendStatus(ws, 'error', `SSH connection failed: ${(err as Error).message}`);
+            ws.close(4006, 'SSH connection failed');
+            return;
+          } finally {
+            sshConnecting.delete(sessionId);
+          }
         }
       }
     }

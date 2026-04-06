@@ -32,8 +32,6 @@ export class SSHAdapter extends EventEmitter {
             this.clients.set(sessionId, client);
             this.channels.set(sessionId, channel);
 
-            this.initColorEnv(channel);
-
             channel.on('data', (data: Buffer) => {
               const str = data.toString();
               this.extractOscTitle(sessionId, str);
@@ -104,20 +102,6 @@ export class SSHAdapter extends EventEmitter {
 
   isConnected(sessionId: string): boolean {
     return this.channels.has(sessionId);
-  }
-
-  private initColorEnv(channel: ClientChannel): void {
-    const init = [
-      'export TERM=xterm-256color COLORTERM=truecolor',
-      'command -v dircolors >/dev/null 2>&1 && eval "$(dircolors -b)" 2>/dev/null',
-      '[ -z "$(alias ls 2>/dev/null | grep color)" ] && alias ls="ls --color=auto" 2>/dev/null',
-      'clear',
-    ].join('; ');
-    setTimeout(() => {
-      if (!channel.destroyed) {
-        channel.write(`${init}\n`);
-      }
-    }, 500);
   }
 
   private extractOscTitle(sessionId: string, data: string): void {

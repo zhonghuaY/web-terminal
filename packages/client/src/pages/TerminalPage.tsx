@@ -113,7 +113,7 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
         maxRetries={maxRetries}
         onReconnect={reconnect}
       />
-      <div className="flex-1 overflow-hidden p-1">
+      <div className="min-h-0 flex-1 overflow-hidden">
         <TerminalComponent
           key={`${activeId}-${prefs.theme}-${prefs.fontSize}`}
           onData={handleTermData}

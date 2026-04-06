@@ -1,5 +1,6 @@
 import { Client, type ClientChannel } from 'ssh2';
 import fs from 'node:fs';
+import os from 'node:os';
 import { EventEmitter } from 'node:events';
 import type { SSHConnection } from '@web-terminal/shared';
 
@@ -61,8 +62,9 @@ export class SSHAdapter extends EventEmitter {
       };
 
       if (connection.authMethod === 'key' && connection.keyPath) {
+        const resolvedPath = connection.keyPath.replace(/^~/, os.homedir());
         try {
-          connectConfig.privateKey = fs.readFileSync(connection.keyPath);
+          connectConfig.privateKey = fs.readFileSync(resolvedPath);
         } catch {
           reject(new Error(`Cannot read SSH key: ${connection.keyPath}`));
           return;

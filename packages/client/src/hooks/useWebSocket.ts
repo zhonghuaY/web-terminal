@@ -1,10 +1,11 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 
 interface WsMessage {
-  type: 'output' | 'status';
+  type: 'output' | 'status' | 'titleChange';
   data?: string;
   state?: 'connected' | 'disconnected' | 'error';
   message?: string;
+  title?: string;
 }
 
 interface UseWebSocketOpts {
@@ -12,11 +13,12 @@ interface UseWebSocketOpts {
   token: string;
   onData: (data: string) => void;
   onStatus: (state: string, message: string) => void;
+  onTitleChange?: (title: string) => void;
 }
 
 const MAX_RETRIES = 20;
 
-export function useWebSocket({ sessionId, token, onData, onStatus }: UseWebSocketOpts) {
+export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange }: UseWebSocketOpts) {
   const wsRef = useRef<WebSocket | null>(null);
   const retryRef = useRef(0);
   const [connected, setConnected] = useState(false);
@@ -27,6 +29,8 @@ export function useWebSocket({ sessionId, token, onData, onStatus }: UseWebSocke
   onDataRef.current = onData;
   const onStatusRef = useRef(onStatus);
   onStatusRef.current = onStatus;
+  const onTitleChangeRef = useRef(onTitleChange);
+  onTitleChangeRef.current = onTitleChange;
 
   useEffect(() => {
     const gen = ++generationRef.current;
@@ -64,6 +68,8 @@ export function useWebSocket({ sessionId, token, onData, onStatus }: UseWebSocke
             onStatusRef.current(msg.state ?? 'unknown', msg.message ?? '');
             if (msg.state === 'connected') setConnected(true);
             if (msg.state === 'disconnected') setConnected(false);
+          } else if (msg.type === 'titleChange' && msg.title) {
+            onTitleChangeRef.current?.(msg.title);
           }
         } catch {
           // Ignore malformed
@@ -149,6 +155,8 @@ export function useWebSocket({ sessionId, token, onData, onStatus }: UseWebSocke
           onStatusRef.current(msg.state ?? 'unknown', msg.message ?? '');
           if (msg.state === 'connected') setConnected(true);
           if (msg.state === 'disconnected') setConnected(false);
+        } else if (msg.type === 'titleChange' && msg.title) {
+          onTitleChangeRef.current?.(msg.title);
         }
       } catch { /* ignore */ }
     };

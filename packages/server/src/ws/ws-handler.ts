@@ -224,6 +224,60 @@ export function setupWebSocket(
     }
   });
 
+  const TITLE_POLL_INTERVAL_MS = 3000;
+  const lastTitles = new Map<string, string>();
+
+  function sendTitleToClients(sessionId: string, title: string) {
+    const clients = sessionClients.get(sessionId);
+    if (!clients) return;
+    const msg: WsServerMessage = { type: 'titleChange', title };
+    const payload = JSON.stringify(msg);
+    for (const ws of clients) {
+      if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+    }
+  }
+
+  const titlePollTimer = setInterval(async () => {
+    const activeIds = ptyAdapter.getActiveSessionIds();
+    for (const sessionId of activeIds) {
+      try {
+        const cmd = await ptyAdapter.getPaneCommand(sessionId);
+
+        let resolvedTitle: string | null = null;
+
+        if (cmd === 'tmux') {
+          resolvedTitle = await ptyAdapter.detectNestedTmuxSession(sessionId);
+        }
+
+        if (!resolvedTitle) {
+          resolvedTitle = await ptyAdapter.getPaneTitle(sessionId);
+        }
+
+        if (!resolvedTitle) continue;
+        const prev = lastTitles.get(sessionId);
+        if (prev === resolvedTitle) continue;
+        lastTitles.set(sessionId, resolvedTitle);
+
+        const session = sessionManager.get(sessionId);
+        if (session && session.name !== resolvedTitle) {
+          sessionManager.rename(sessionId, resolvedTitle);
+        }
+
+        sendTitleToClients(sessionId, resolvedTitle);
+      } catch {
+        // ignore polling errors
+      }
+    }
+
+    for (const id of lastTitles.keys()) {
+      if (!ptyAdapter.isAttached(id)) lastTitles.delete(id);
+    }
+  }, TITLE_POLL_INTERVAL_MS);
+
+  wss.on('close', () => {
+    clearInterval(titlePollTimer);
+  });
+
   return wss;
 }
 

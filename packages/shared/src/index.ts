@@ -27,10 +27,11 @@ export interface WsClientMessage {
 }
 
 export interface WsServerMessage {
-  type: 'output' | 'status';
+  type: 'output' | 'status' | 'titleChange';
   data?: string;
   state?: 'connected' | 'disconnected' | 'error';
   message?: string;
+  title?: string;
 }
 
 export interface HealthResponse {

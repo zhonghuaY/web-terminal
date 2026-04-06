@@ -93,6 +93,14 @@ export class SessionManager {
     return session;
   }
 
+  setTmuxSession(id: string, tmuxSession: string): void {
+    const session = this.sessions.get(id);
+    if (session && session.tmuxSession !== tmuxSession) {
+      session.tmuxSession = tmuxSession;
+      this.save();
+    }
+  }
+
   delete(id: string): boolean {
     const deleted = this.sessions.delete(id);
     if (deleted) this.save();

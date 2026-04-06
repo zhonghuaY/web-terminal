@@ -3,7 +3,7 @@ set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_NAME="web-terminal"
-SERVER_PORT="${PORT:-8090}"
+SERVER_PORT=8090
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -17,6 +17,9 @@ err()  { echo -e "${RED}[${PROJECT_NAME}]${NC} $*" >&2; }
 kill_previous() {
   log "Stopping previous processes..."
 
+  local frpc_pid
+  frpc_pid=$(pgrep -x frpc 2>/dev/null || true)
+
   local pids
   pids=$(pgrep -f "tsx.*web_terminal" 2>/dev/null || true)
   pids+=" $(pgrep -f "vite.*web_terminal" 2>/dev/null || true)"
@@ -24,6 +27,11 @@ kill_previous() {
   pids+=" $(lsof -ti:"${SERVER_PORT}" 2>/dev/null || true)"
 
   pids=$(echo "$pids" | tr ' ' '\n' | sort -u | grep -v '^$' || true)
+
+  # Never kill frpc — it manages FRP tunnels for all WSL services
+  if [ -n "$frpc_pid" ]; then
+    pids=$(echo "$pids" | grep -v "^${frpc_pid}$" || true)
+  fi
 
   if [ -z "$pids" ]; then
     log "No previous processes found."

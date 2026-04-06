@@ -19,65 +19,90 @@ const MAX_RETRIES = 20;
 export function useWebSocket({ sessionId, token, onData, onStatus }: UseWebSocketOpts) {
   const wsRef = useRef<WebSocket | null>(null);
   const retryRef = useRef(0);
-  const closedRef = useRef(false);
   const [connected, setConnected] = useState(false);
   const [retries, setRetries] = useState(0);
+  const generationRef = useRef(0);
 
-  const connect = useCallback(() => {
-    if (closedRef.current) return;
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}&sessionId=${encodeURIComponent(sessionId)}`;
-
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-
-    ws.onopen = () => {
-      retryRef.current = 0;
-      setRetries(0);
-      setConnected(true);
-    };
-
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data) as WsMessage;
-        if (msg.type === 'output' && msg.data) {
-          onData(msg.data);
-        } else if (msg.type === 'status') {
-          onStatus(msg.state ?? 'unknown', msg.message ?? '');
-          if (msg.state === 'connected') setConnected(true);
-          if (msg.state === 'disconnected') setConnected(false);
-        }
-      } catch {
-        // Ignore malformed
-      }
-    };
-
-    ws.onclose = () => {
-      setConnected(false);
-      wsRef.current = null;
-
-      if (!closedRef.current && retryRef.current < MAX_RETRIES) {
-        const delay = Math.min(1000 * Math.pow(2, retryRef.current), 30000);
-        retryRef.current++;
-        setRetries(retryRef.current);
-        setTimeout(connect, delay);
-      }
-    };
-
-    ws.onerror = () => {
-      ws.close();
-    };
-  }, [sessionId, token, onData, onStatus]);
+  const onDataRef = useRef(onData);
+  onDataRef.current = onData;
+  const onStatusRef = useRef(onStatus);
+  onStatusRef.current = onStatus;
 
   useEffect(() => {
-    closedRef.current = false;
+    const gen = ++generationRef.current;
+    retryRef.current = 0;
+    setRetries(0);
+
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function connect() {
+      if (gen !== generationRef.current) return;
+
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}&sessionId=${encodeURIComponent(sessionId)}`;
+
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        if (gen !== generationRef.current) {
+          ws.close();
+          return;
+        }
+        retryRef.current = 0;
+        setRetries(0);
+        setConnected(true);
+      };
+
+      ws.onmessage = (event) => {
+        if (gen !== generationRef.current) return;
+        try {
+          const msg = JSON.parse(event.data) as WsMessage;
+          if (msg.type === 'output' && msg.data) {
+            onDataRef.current(msg.data);
+          } else if (msg.type === 'status') {
+            onStatusRef.current(msg.state ?? 'unknown', msg.message ?? '');
+            if (msg.state === 'connected') setConnected(true);
+            if (msg.state === 'disconnected') setConnected(false);
+          }
+        } catch {
+          // Ignore malformed
+        }
+      };
+
+      ws.onclose = () => {
+        if (gen !== generationRef.current) return;
+        setConnected(false);
+        wsRef.current = null;
+
+        if (retryRef.current < MAX_RETRIES) {
+          const delay = Math.min(1000 * Math.pow(2, retryRef.current), 30000);
+          retryRef.current++;
+          setRetries(retryRef.current);
+          retryTimer = setTimeout(connect, delay);
+        }
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+    }
+
     connect();
+
     return () => {
-      closedRef.current = true;
-      wsRef.current?.close();
+      generationRef.current++;
+      if (retryTimer) clearTimeout(retryTimer);
+      if (wsRef.current) {
+        wsRef.current.onclose = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.onerror = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      setConnected(false);
     };
-  }, [connect]);
+  }, [sessionId, token]);
 
   const send = useCallback((data: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -94,9 +119,48 @@ export function useWebSocket({ sessionId, token, onData, onStatus }: UseWebSocke
   const reconnect = useCallback(() => {
     retryRef.current = 0;
     setRetries(0);
-    closedRef.current = false;
-    connect();
-  }, [connect]);
+    if (wsRef.current) {
+      wsRef.current.onclose = null;
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    const gen = ++generationRef.current;
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}&sessionId=${encodeURIComponent(sessionId)}`;
+
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      if (gen !== generationRef.current) { ws.close(); return; }
+      retryRef.current = 0;
+      setRetries(0);
+      setConnected(true);
+    };
+
+    ws.onmessage = (event) => {
+      if (gen !== generationRef.current) return;
+      try {
+        const msg = JSON.parse(event.data) as WsMessage;
+        if (msg.type === 'output' && msg.data) {
+          onDataRef.current(msg.data);
+        } else if (msg.type === 'status') {
+          onStatusRef.current(msg.state ?? 'unknown', msg.message ?? '');
+          if (msg.state === 'connected') setConnected(true);
+          if (msg.state === 'disconnected') setConnected(false);
+        }
+      } catch { /* ignore */ }
+    };
+
+    ws.onclose = () => {
+      if (gen !== generationRef.current) return;
+      setConnected(false);
+      wsRef.current = null;
+    };
+
+    ws.onerror = () => { ws.close(); };
+  }, [sessionId, token]);
 
   return { send, resize, connected, retries, maxRetries: MAX_RETRIES, reconnect };
 }

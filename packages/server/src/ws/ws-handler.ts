@@ -157,6 +157,10 @@ export function setupWebSocket(
           } finally {
             sshConnecting.delete(sessionId);
           }
+
+          if (session.tmuxSession) {
+            sshAdapter.write(sessionId, `tmux a -t ${session.tmuxSession}\n`);
+          }
         }
       }
     }
@@ -223,8 +227,9 @@ export function setupWebSocket(
     lastTitles.set(sessionId, title);
 
     const session = sessionManager.get(sessionId);
-    if (session && session.name !== title) {
-      sessionManager.rename(sessionId, title);
+    if (session) {
+      if (session.name !== title) sessionManager.rename(sessionId, title);
+      if (session.type === 'ssh') sessionManager.setTmuxSession(sessionId, title);
     }
     sendTitleToClients(sessionId, title);
   });

@@ -1,10 +1,8 @@
-import { useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from 'react';
-import { Terminal as XTerm } from '@xterm/xterm';
+import { useState, useCallback, useRef, useEffect, lazy, Suspense } from 'react';
 import { api } from '../api/client';
-import { useWebSocket } from '../hooks/useWebSocket';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { usePreferences } from '../hooks/usePreferences';
-import TerminalComponent from '../components/Terminal';
+import TerminalTab from '../components/TerminalTab';
 import MenuBar from '../components/MenuBar';
 import TabBar from '../components/TabBar';
 import TouchToolbar from '../components/TouchToolbar';
@@ -30,7 +28,10 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
   const [tabs, setTabs] = useState<Session[]>([]);
   const [activeId, setActiveId] = useState(initialSessionId);
   const [showSettings, setShowSettings] = useState(false);
-  const activeTermRef = useRef<XTerm | null>(null);
+  const [connectionStates, setConnectionStates] = useState<Record<string, { connected: boolean; retries: number }>>({});
+
+  const activeSendRef = useRef<((data: string) => void) | null>(null);
+  const activeReconnectRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     api.get<Session[]>('/api/sessions').then((sessions) => {
@@ -46,39 +47,6 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
       api.put('/api/preferences', { lastView: 'terminal', lastSessionId: activeId }).catch(() => {});
     }
   }, [activeId]);
-
-  const handleData = useCallback((data: string) => {
-    activeTermRef.current?.write(data);
-  }, []);
-
-  const handleStatus = useCallback((_state: string, _message: string) => {}, []);
-
-  const handleWsTitleChange = useCallback((title: string) => {
-    if (!title || !activeId) return;
-    setTabs((prev) => {
-      const tab = prev.find((t) => t.id === activeId);
-      if (!tab || tab.name === title) return prev;
-      return prev.map((t) => (t.id === activeId ? { ...t, name: title } : t));
-    });
-  }, [activeId]);
-
-  const { send, resize, connected, retries, maxRetries, reconnect } = useWebSocket({
-    sessionId: activeId,
-    token,
-    onData: handleData,
-    onStatus: handleStatus,
-    onTitleChange: handleWsTitleChange,
-  });
-
-  const handleTermData = useCallback(
-    (data: string) => send(data),
-    [send],
-  );
-
-  const handleResize = useCallback(
-    (cols: number, rows: number) => resize(cols, rows),
-    [resize],
-  );
 
   const handleSelectTab = useCallback((id: string) => {
     setActiveId(id);
@@ -116,20 +84,31 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
   }, []);
 
   const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleTitleChange = useCallback((title: string) => {
-    if (!title || !activeId) return;
+  const handleTitleChange = useCallback((sessionId: string, title: string) => {
+    if (!title) return;
     setTabs((prev) => {
-      const tab = prev.find((t) => t.id === activeId);
+      const tab = prev.find((t) => t.id === sessionId);
       if (!tab || tab.name === title) return prev;
-      return prev.map((t) => (t.id === activeId ? { ...t, name: title } : t));
+      return prev.map((t) => (t.id === sessionId ? { ...t, name: title } : t));
     });
     if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current);
     titleDebounceRef.current = setTimeout(() => {
-      api.patch(`/api/sessions/${activeId}`, { name: title }).catch(() => {});
+      api.patch(`/api/sessions/${sessionId}`, { name: title }).catch(() => {});
     }, 500);
-  }, [activeId]);
+  }, []);
+
+  const handleConnectionChange = useCallback((sessionId: string, connected: boolean, retries: number) => {
+    setConnectionStates((prev) => {
+      const existing = prev[sessionId];
+      if (existing?.connected === connected && existing?.retries === retries) return prev;
+      return { ...prev, [sessionId]: { connected, retries } };
+    });
+  }, []);
 
   const activeSession = tabs.find((t) => t.id === activeId);
+  const activeConnState = connectionStates[activeId];
+  const activeConnected = activeConnState?.connected ?? false;
+  const activeRetries = activeConnState?.retries ?? 0;
 
   const handleNewSSH = useCallback(() => {
     onBackToDashboard();
@@ -140,6 +119,14 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
     if (activeId) handleCloseTab(activeId);
   }, [activeId, handleCloseTab]);
 
+  const handleReconnect = useCallback(() => {
+    activeReconnectRef.current?.();
+  }, []);
+
+  const handleSendToActive = useCallback((data: string) => {
+    activeSendRef.current?.(data);
+  }, []);
+
   return (
     <div className="flex h-screen flex-col bg-gray-950">
       <MenuBar
@@ -148,8 +135,8 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
         onBackToDashboard={onBackToDashboard}
         onSettings={handleShowSettings}
         onCloseTab={handleCloseActiveTab}
-        onReconnect={reconnect}
-        connected={connected}
+        onReconnect={handleReconnect}
+        connected={activeConnected}
         sessionName={activeSession?.name ?? ''}
         sessionType={activeSession?.type ?? 'local'}
       />
@@ -165,22 +152,27 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
         />
       </div>
       <ReconnectBanner
-        connected={connected}
-        retries={retries}
-        maxRetries={maxRetries}
-        onReconnect={reconnect}
+        connected={activeConnected}
+        retries={activeRetries}
+        maxRetries={20}
+        onReconnect={handleReconnect}
       />
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <TerminalComponent
-          key={`${activeId}-${prefs.theme}-${prefs.fontSize}`}
-          onData={handleTermData}
-          onResize={handleResize}
-          onTitleChange={handleTitleChange}
-          termRef={activeTermRef}
-          prefs={prefs}
-        />
+      <div className="min-h-0 flex-1 overflow-hidden relative">
+        {tabs.map((tab) => (
+          <TerminalTab
+            key={tab.id}
+            sessionId={tab.id}
+            token={token}
+            prefs={prefs}
+            visible={tab.id === activeId}
+            onTitleChange={handleTitleChange}
+            onConnectionChange={handleConnectionChange}
+            sendRef={tab.id === activeId ? activeSendRef : undefined}
+            reconnectRef={tab.id === activeId ? activeReconnectRef : undefined}
+          />
+        ))}
       </div>
-      {isMobile && <TouchToolbar onSend={send} />}
+      {isMobile && <TouchToolbar onSend={handleSendToActive} />}
       {showSettings && (
         <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"><div className="text-gray-400">Loading...</div></div>}>
           <SettingsPage prefs={prefs} onUpdate={updatePrefs} onClose={() => setShowSettings(false)} />

@@ -13,9 +13,10 @@ interface Props {
   onTitleChange?: (title: string) => void;
   termRef: React.MutableRefObject<XTerm | null>;
   prefs: Preferences;
+  visible?: boolean;
 }
 
-function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, prefs }: Props) {
+function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, prefs, visible = true }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
@@ -115,6 +116,14 @@ function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, pref
       termRef.current = null;
     };
   }, [termRef, prefs.theme, prefs.fontSize, prefs.fontFamily]);
+
+  useEffect(() => {
+    if (visible && fitAddonRef.current) {
+      requestAnimationFrame(() => {
+        fitAddonRef.current?.fit();
+      });
+    }
+  }, [visible]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>

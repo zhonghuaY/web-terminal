@@ -13,8 +13,9 @@ export function createSessionRouter(
     res.json(sessionManager.list());
   });
 
-  router.get('/tmux-list', (_req: Request, res: Response) => {
-    res.json(ptyAdapter.listTmuxSessions());
+  router.get('/tmux-list', async (_req: Request, res: Response) => {
+    const sessions = await ptyAdapter.listTmuxSessions();
+    res.json(sessions);
   });
 
   router.post('/', (req: Request, res: Response) => {

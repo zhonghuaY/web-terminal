@@ -15,4 +15,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    target: 'es2022',
+    minify: 'esbuild',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'xterm': ['@xterm/xterm', '@xterm/addon-fit', '@xterm/addon-web-links', '@xterm/addon-search'],
+          'react-vendor': ['react', 'react-dom'],
+        },
+      },
+    },
+  },
 });

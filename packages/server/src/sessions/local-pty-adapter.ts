@@ -1,7 +1,10 @@
 import { spawn as ptySpawn, type IPty } from 'node-pty';
-import { execSync } from 'node:child_process';
+import { exec, execSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { promisify } from 'node:util';
 import type { TmuxSessionInfo } from '@web-terminal/shared';
+
+const execAsync = promisify(exec);
 
 export interface PtyEvents {
   data: (data: string) => void;
@@ -97,13 +100,12 @@ export class LocalPtyAdapter extends EventEmitter {
     }
   }
 
-  listTmuxSessions(): TmuxSessionInfo[] {
+  async listTmuxSessions(): Promise<TmuxSessionInfo[]> {
     try {
-      const raw = execSync(
+      const { stdout } = await execAsync(
         'tmux list-sessions -F "#{session_name}\t#{session_windows}\t#{session_attached}\t#{session_created}" 2>/dev/null',
-        { encoding: 'utf8' },
       );
-      return raw
+      return stdout
         .trim()
         .split('\n')
         .filter(Boolean)

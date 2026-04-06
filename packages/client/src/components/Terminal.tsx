@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, memo } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -14,12 +14,17 @@ interface Props {
   prefs: Preferences;
 }
 
-export default function TerminalComponent({ onData, onResize, termRef, prefs }: Props) {
+function TerminalComponentInner({ onData, onResize, termRef, prefs }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const onDataRef = useRef(onData);
+  onDataRef.current = onData;
+  const onResizeRef = useRef(onResize);
+  onResizeRef.current = onResize;
 
   const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -45,6 +50,7 @@ export default function TerminalComponent({ onData, onResize, termRef, prefs }: 
       fontSize: prefs.fontSize,
       fontFamily: prefs.fontFamily,
       theme: themeObj.theme,
+      scrollback: 10000,
     });
 
     const fitAddon = new FitAddon();
@@ -80,10 +86,10 @@ export default function TerminalComponent({ onData, onResize, termRef, prefs }: 
     searchAddonRef.current = searchAddon;
     termRef.current = term;
 
-    onResize(term.cols, term.rows);
+    onResizeRef.current(term.cols, term.rows);
 
-    term.onData((data) => onData(data));
-    term.onResize(({ cols, rows }) => onResize(cols, rows));
+    term.onData((data) => onDataRef.current(data));
+    term.onResize(({ cols, rows }) => onResizeRef.current(cols, rows));
 
     const handleKeyboard = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'F') {
@@ -104,7 +110,7 @@ export default function TerminalComponent({ onData, onResize, termRef, prefs }: 
       term.dispose();
       termRef.current = null;
     };
-  }, [onData, onResize, termRef, prefs.theme, prefs.fontSize, prefs.fontFamily]);
+  }, [termRef, prefs.theme, prefs.fontSize, prefs.fontFamily]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
@@ -152,3 +158,6 @@ export default function TerminalComponent({ onData, onResize, termRef, prefs }: 
     </div>
   );
 }
+
+const TerminalComponent = memo(TerminalComponentInner);
+export default TerminalComponent;

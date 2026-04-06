@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { api } from '../api/client';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -9,7 +9,8 @@ import MenuBar from '../components/MenuBar';
 import TabBar from '../components/TabBar';
 import TouchToolbar from '../components/TouchToolbar';
 import ReconnectBanner from '../components/ReconnectBanner';
-import SettingsPage from './SettingsPage';
+
+const SettingsPage = lazy(() => import('./SettingsPage'));
 
 interface Session {
   id: string;
@@ -95,14 +96,19 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
     onBackToDashboard();
   }, [onBackToDashboard]);
 
+  const handleShowSettings = useCallback(() => setShowSettings(true), []);
+  const handleCloseActiveTab = useCallback(() => {
+    if (activeId) handleCloseTab(activeId);
+  }, [activeId, handleCloseTab]);
+
   return (
     <div className="flex h-screen flex-col bg-gray-950">
       <MenuBar
         onNewLocal={handleCreateTab}
         onNewSSH={handleNewSSH}
         onBackToDashboard={onBackToDashboard}
-        onSettings={() => setShowSettings(true)}
-        onCloseTab={() => activeId && handleCloseTab(activeId)}
+        onSettings={handleShowSettings}
+        onCloseTab={handleCloseActiveTab}
         onReconnect={reconnect}
         connected={connected}
         sessionName={activeSession?.name ?? ''}
@@ -110,7 +116,7 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
       />
       <div className="flex items-center">
         <TabBar
-          tabs={tabs.map((t) => ({ id: t.id, name: t.name, type: t.type }))}
+          tabs={tabs}
           activeId={activeId}
           onSelect={handleSelectTab}
           onClose={handleCloseTab}
@@ -135,7 +141,9 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
       </div>
       {isMobile && <TouchToolbar onSend={send} />}
       {showSettings && (
-        <SettingsPage prefs={prefs} onUpdate={updatePrefs} onClose={() => setShowSettings(false)} />
+        <Suspense fallback={<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"><div className="text-gray-400">Loading...</div></div>}>
+          <SettingsPage prefs={prefs} onUpdate={updatePrefs} onClose={() => setShowSettings(false)} />
+        </Suspense>
       )}
     </div>
   );

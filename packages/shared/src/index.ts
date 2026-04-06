@@ -6,6 +6,7 @@ export interface Session {
   lastAccessed: string;
   sshConnectionId?: string;
   tmuxSession?: string;
+  lastCwd?: string;
   restorable?: boolean;
 }
 

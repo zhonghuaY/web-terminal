@@ -124,7 +124,7 @@ export function setupWebSocket(
         } else if (ptyAdapter.tmuxSessionExists(sessionId)) {
           ptyAdapter.attach(sessionId);
         } else {
-          ptyAdapter.createSession(sessionId);
+          ptyAdapter.createSession(sessionId, 80, 24, session.lastCwd);
         }
       }
     } else if (session.type === 'ssh') {
@@ -160,6 +160,8 @@ export function setupWebSocket(
 
           if (session.tmuxSession) {
             sshAdapter.write(sessionId, `tmux a -t ${session.tmuxSession}\n`);
+          } else if (session.lastCwd) {
+            sshAdapter.write(sessionId, `cd ${session.lastCwd}\n`);
           }
         }
       }
@@ -225,6 +227,15 @@ export function setupWebSocket(
     sendTitleToClients(sessionId, title);
   });
 
+  const lastCwds = new Map<string, string>();
+
+  sshAdapter.on('cwdChange', (sessionId: string, cwd: string) => {
+    const prev = lastCwds.get(sessionId);
+    if (prev === cwd) return;
+    lastCwds.set(sessionId, cwd);
+    sessionManager.setCwd(sessionId, cwd);
+  });
+
   sshAdapter.on('exit', (sessionId: string, _code: number) => {
     const clients = sessionClients.get(sessionId);
     if (!clients) return;
@@ -288,13 +299,25 @@ export function setupWebSocket(
         }
 
         sendTitleToClients(sessionId, resolvedTitle);
+
+        const cwd = await ptyAdapter.getPaneCwd(sessionId);
+        if (cwd) {
+          const prevCwd = lastCwds.get(sessionId);
+          if (prevCwd !== cwd) {
+            lastCwds.set(sessionId, cwd);
+            sessionManager.setCwd(sessionId, cwd);
+          }
+        }
       } catch {
         // ignore polling errors
       }
     }
 
     for (const id of lastTitles.keys()) {
-      if (!ptyAdapter.isAttached(id)) lastTitles.delete(id);
+      if (!ptyAdapter.isAttached(id)) {
+        lastTitles.delete(id);
+        lastCwds.delete(id);
+      }
     }
   }, TITLE_POLL_INTERVAL_MS);
 

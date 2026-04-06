@@ -53,6 +53,14 @@ export class SessionManager {
     }
   }
 
+  rename(id: string, name: string): Session | null {
+    const session = this.sessions.get(id);
+    if (!session) return null;
+    session.name = name;
+    this.save();
+    return session;
+  }
+
   delete(id: string): boolean {
     const deleted = this.sessions.delete(id);
     if (deleted) this.save();

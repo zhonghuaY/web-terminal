@@ -36,6 +36,21 @@ export function createSessionRouter(
     res.status(201).json(session);
   });
 
+  router.patch('/:id', (req: Request, res: Response) => {
+    const id = req.params.id as string;
+    const { name } = req.body as { name?: string };
+    if (!name?.trim()) {
+      res.status(400).json({ error: 'name is required' });
+      return;
+    }
+    const updated = sessionManager.rename(id, name.trim());
+    if (!updated) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+    res.json(updated);
+  });
+
   router.delete('/:id', (req: Request, res: Response) => {
     const id = req.params.id as string;
     const session = sessionManager.get(id);

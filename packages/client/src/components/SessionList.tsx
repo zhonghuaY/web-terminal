@@ -1,7 +1,10 @@
+import { useState } from 'react';
+
 interface Session {
   id: string;
   type: 'local' | 'ssh';
   name: string;
+  createdAt?: string;
   lastAccessed: string;
 }
 
@@ -9,9 +12,13 @@ interface Props {
   sessions: Session[];
   onResume: (id: string) => void;
   onDelete: (id: string) => void;
+  onRename: (id: string, name: string) => void;
 }
 
-export default function SessionList({ sessions, onResume, onDelete }: Props) {
+export default function SessionList({ sessions, onResume, onDelete, onRename }: Props) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+
   if (sessions.length === 0) {
     return (
       <div className="rounded-lg border border-gray-800 bg-gray-900 p-6 text-center text-sm text-gray-500">
@@ -20,6 +27,18 @@ export default function SessionList({ sessions, onResume, onDelete }: Props) {
     );
   }
 
+  const startRename = (session: Session) => {
+    setEditing(session.id);
+    setEditName(session.name);
+  };
+
+  const commitRename = (id: string) => {
+    if (editName.trim()) {
+      onRename(id, editName.trim());
+    }
+    setEditing(null);
+  };
+
   return (
     <div className="space-y-2">
       {sessions.map((session) => (
@@ -27,9 +46,9 @@ export default function SessionList({ sessions, onResume, onDelete }: Props) {
           key={session.id}
           className="flex items-center justify-between rounded-lg border border-gray-800 bg-gray-900 px-4 py-3"
         >
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <span
-              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+              className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
                 session.type === 'local'
                   ? 'bg-blue-500/10 text-blue-400'
                   : 'bg-emerald-500/10 text-emerald-400'
@@ -37,14 +56,45 @@ export default function SessionList({ sessions, onResume, onDelete }: Props) {
             >
               {session.type}
             </span>
-            <div>
-              <p className="text-sm font-medium text-white">{session.name}</p>
+            <div className="min-w-0 flex-1">
+              {editing === session.id ? (
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onBlur={() => commitRename(session.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitRename(session.id);
+                    if (e.key === 'Escape') setEditing(null);
+                  }}
+                  autoFocus
+                  className="w-full rounded border border-blue-500 bg-gray-800 px-2 py-0.5 text-sm text-white outline-none"
+                />
+              ) : (
+                <p
+                  className="cursor-pointer truncate text-sm font-medium text-white hover:text-blue-400"
+                  onDoubleClick={() => startRename(session)}
+                  title="Double-click to rename"
+                >
+                  {session.name}
+                </p>
+              )}
               <p className="text-xs text-gray-500">
-                {new Date(session.lastAccessed).toLocaleString()}
+                {session.createdAt && (
+                  <span>Created {new Date(session.createdAt).toLocaleDateString()} · </span>
+                )}
+                Last used {new Date(session.lastAccessed).toLocaleString()}
               </p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="ml-3 flex gap-2">
+            <button
+              onClick={() => startRename(session)}
+              className="rounded-md px-2 py-1 text-sm text-gray-500 hover:bg-gray-800 hover:text-gray-300"
+              title="Rename"
+            >
+              ✏️
+            </button>
             <button
               onClick={() => onResume(session.id)}
               className="rounded-md bg-gray-800 px-3 py-1 text-sm text-gray-300 hover:bg-gray-700 hover:text-white"

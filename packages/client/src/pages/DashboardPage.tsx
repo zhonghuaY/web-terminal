@@ -4,6 +4,8 @@ import SessionList from '../components/SessionList';
 import ConnectionList from '../components/ConnectionList';
 import NewSessionDialog from '../components/NewSessionDialog';
 import NewConnectionDialog from '../components/NewConnectionDialog';
+import EditConnectionDialog from '../components/EditConnectionDialog';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 interface Session {
   id: string;
@@ -21,6 +23,7 @@ interface SSHConnection {
   port: number;
   username: string;
   authMethod: string;
+  keyPath?: string;
   source: string;
 }
 
@@ -34,6 +37,9 @@ export default function DashboardPage({ onOpenTerminal, onLogout }: Props) {
   const [connections, setConnections] = useState<SSHConnection[]>([]);
   const [showNewSession, setShowNewSession] = useState(false);
   const [showNewConnection, setShowNewConnection] = useState(false);
+  const [editingConnection, setEditingConnection] = useState<SSHConnection | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ type: 'session' | 'connection'; id: string; name: string } | null>(null);
+  const [testResult, setTestResult] = useState<Record<string, { success: boolean; message: string }>>({});
 
   const fetchSessions = useCallback(async () => {
     try {
@@ -66,8 +72,19 @@ export default function DashboardPage({ onOpenTerminal, onLogout }: Props) {
   };
 
   const handleDeleteSession = async (id: string) => {
-    await api.delete(`/api/sessions/${id}`);
-    setSessions((prev) => prev.filter((s) => s.id !== id));
+    const session = sessions.find((s) => s.id === id);
+    if (session) {
+      setConfirmDelete({ type: 'session', id, name: session.name });
+    }
+  };
+
+  const handleRenameSession = async (id: string, name: string) => {
+    try {
+      const updated = await api.patch<Session>(`/api/sessions/${id}`, { name });
+      setSessions((prev) => prev.map((s) => (s.id === id ? updated : s)));
+    } catch {
+      // handle error
+    }
   };
 
   const handleCreateConnection = async (conn: { name: string; host: string; port: number; username: string; authMethod: string; keyPath?: string }) => {
@@ -76,9 +93,58 @@ export default function DashboardPage({ onOpenTerminal, onLogout }: Props) {
     setShowNewConnection(false);
   };
 
+  const handleEditConnection = async (id: string, conn: { name: string; host: string; port: number; username: string; authMethod: string; keyPath?: string }) => {
+    const updated = await api.put<SSHConnection>(`/api/connections/${id}`, conn);
+    setConnections((prev) => prev.map((c) => (c.id === id ? updated : c)));
+    setEditingConnection(null);
+  };
+
+  const handleDuplicateConnection = async (conn: SSHConnection) => {
+    const created = await api.post<SSHConnection>('/api/connections', {
+      name: `${conn.name} (copy)`,
+      host: conn.host,
+      port: conn.port,
+      username: conn.username,
+      authMethod: conn.authMethod,
+      keyPath: conn.keyPath,
+    });
+    setConnections((prev) => [...prev, created]);
+  };
+
   const handleDeleteConnection = async (id: string) => {
-    await api.delete(`/api/connections/${id}`);
-    setConnections((prev) => prev.filter((c) => c.id !== id));
+    const conn = connections.find((c) => c.id === id);
+    if (conn) {
+      setConfirmDelete({ type: 'connection', id, name: conn.name });
+    }
+  };
+
+  const handleTestConnection = async (id: string) => {
+    setTestResult((prev) => ({ ...prev, [id]: { success: false, message: 'Testing...' } }));
+    try {
+      const result = await api.post<{ success: boolean; message?: string; error?: string }>(`/api/connections/${id}/test`, {});
+      setTestResult((prev) => ({
+        ...prev,
+        [id]: { success: result.success, message: result.message ?? result.error ?? '' },
+      }));
+    } catch (err) {
+      setTestResult((prev) => ({
+        ...prev,
+        [id]: { success: false, message: (err as Error).message },
+      }));
+    }
+  };
+
+  const confirmDeleteAction = async () => {
+    if (!confirmDelete) return;
+    const { type, id } = confirmDelete;
+    if (type === 'session') {
+      await api.delete(`/api/sessions/${id}`);
+      setSessions((prev) => prev.filter((s) => s.id !== id));
+    } else {
+      await api.delete(`/api/connections/${id}`);
+      setConnections((prev) => prev.filter((c) => c.id !== id));
+    }
+    setConfirmDelete(null);
   };
 
   const handleConnectSSH = async (connectionId: string) => {
@@ -120,6 +186,7 @@ export default function DashboardPage({ onOpenTerminal, onLogout }: Props) {
               sessions={sessions}
               onResume={onOpenTerminal}
               onDelete={handleDeleteSession}
+              onRename={handleRenameSession}
             />
           </section>
 
@@ -136,7 +203,10 @@ export default function DashboardPage({ onOpenTerminal, onLogout }: Props) {
             <ConnectionList
               connections={connections}
               onConnect={handleConnectSSH}
+              onEdit={(conn) => setEditingConnection(conn)}
+              onDuplicate={handleDuplicateConnection}
               onDelete={handleDeleteConnection}
+              onTest={handleTestConnection}
             />
           </section>
         </div>
@@ -154,6 +224,25 @@ export default function DashboardPage({ onOpenTerminal, onLogout }: Props) {
         <NewConnectionDialog
           onCreate={handleCreateConnection}
           onClose={() => setShowNewConnection(false)}
+        />
+      )}
+
+      {editingConnection && (
+        <EditConnectionDialog
+          connection={editingConnection}
+          onSave={handleEditConnection}
+          onClose={() => setEditingConnection(null)}
+        />
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title={`Delete ${confirmDelete.type === 'session' ? 'Session' : 'Connection'}?`}
+          message={`Are you sure you want to delete "${confirmDelete.name}"? This action cannot be undone.`}
+          confirmLabel="Delete"
+          danger
+          onConfirm={confirmDeleteAction}
+          onCancel={() => setConfirmDelete(null)}
         />
       )}
     </div>

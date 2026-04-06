@@ -57,5 +57,5 @@ export default function TerminalComponent({ onData, onResize, termRef, prefs }: 
     };
   }, [onData, onResize, termRef, prefs.theme, prefs.fontSize, prefs.fontFamily]);
 
-  return <div ref={containerRef} className="h-full w-full" />;
+  return <div ref={containerRef} style={{ width: '100%', height: '100%' }} />;
 }

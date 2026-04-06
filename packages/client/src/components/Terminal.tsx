@@ -10,11 +10,12 @@ import type { Preferences } from '../hooks/usePreferences';
 interface Props {
   onData: (data: string) => void;
   onResize: (cols: number, rows: number) => void;
+  onTitleChange?: (title: string) => void;
   termRef: React.MutableRefObject<XTerm | null>;
   prefs: Preferences;
 }
 
-function TerminalComponentInner({ onData, onResize, termRef, prefs }: Props) {
+function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, prefs }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
@@ -25,6 +26,8 @@ function TerminalComponentInner({ onData, onResize, termRef, prefs }: Props) {
   onDataRef.current = onData;
   const onResizeRef = useRef(onResize);
   onResizeRef.current = onResize;
+  const onTitleChangeRef = useRef(onTitleChange);
+  onTitleChangeRef.current = onTitleChange;
 
   const handleSearchKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -90,6 +93,7 @@ function TerminalComponentInner({ onData, onResize, termRef, prefs }: Props) {
 
     term.onData((data) => onDataRef.current(data));
     term.onResize(({ cols, rows }) => onResizeRef.current(cols, rows));
+    term.onTitleChange((title) => onTitleChangeRef.current?.(title));
 
     const handleKeyboard = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'F') {

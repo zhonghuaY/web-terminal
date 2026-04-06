@@ -23,7 +23,17 @@ export class LocalPtyAdapter extends EventEmitter {
       execSync(`tmux new-session -d -s ${tmuxName} -x ${cols} -y ${rows}`);
     }
 
+    this.enableTmuxTitlePassthrough(tmuxName);
     this.attach(sessionId, cols, rows);
+  }
+
+  private enableTmuxTitlePassthrough(tmuxName: string): void {
+    try {
+      execSync(`tmux set-option -t ${tmuxName} set-titles on 2>/dev/null`);
+      execSync(`tmux set-option -t ${tmuxName} allow-passthrough on 2>/dev/null`);
+    } catch {
+      // Older tmux may not support allow-passthrough
+    }
   }
 
   attach(sessionId: string, cols = 80, rows = 24): void {
@@ -144,6 +154,69 @@ export class LocalPtyAdapter extends EventEmitter {
     });
 
     this.ptyProcesses.set(sessionId, pty);
+  }
+
+  async getPaneTitle(sessionId: string): Promise<string | null> {
+    const tmuxName = `wt-${sessionId}`;
+    try {
+      const { stdout } = await execAsync(
+        `tmux display-message -p -t ${tmuxName} '#{pane_title}' 2>/dev/null`,
+      );
+      return stdout.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async getPaneCommand(sessionId: string): Promise<string | null> {
+    const tmuxName = `wt-${sessionId}`;
+    try {
+      const { stdout } = await execAsync(
+        `tmux display-message -p -t ${tmuxName} '#{pane_current_command}' 2>/dev/null`,
+      );
+      return stdout.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async detectNestedTmuxSession(sessionId: string): Promise<string | null> {
+    const tmuxName = `wt-${sessionId}`;
+    try {
+      const { stdout: panePid } = await execAsync(
+        `tmux display-message -p -t ${tmuxName} '#{pane_pid}' 2>/dev/null`,
+      );
+      const pid = panePid.trim();
+      if (!pid) return null;
+
+      const { stdout: children } = await execAsync(
+        `pgrep -P ${pid} 2>/dev/null || true`,
+      );
+
+      for (const childPid of children.trim().split('\n').filter(Boolean)) {
+        try {
+          const { stdout: cmdline } = await execAsync(
+            `cat /proc/${childPid}/cmdline 2>/dev/null | tr '\\0' ' '`,
+          );
+          const parts = cmdline.trim().split(/\s+/);
+          if (parts[0]?.includes('tmux') && parts.includes('attach-session') || parts.includes('a')) {
+            const tIdx = parts.indexOf('-t');
+            if (tIdx >= 0 && parts[tIdx + 1]) {
+              return parts[tIdx + 1];
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  getActiveSessionIds(): string[] {
+    return Array.from(this.ptyProcesses.keys());
   }
 
   destroyAll(): void {

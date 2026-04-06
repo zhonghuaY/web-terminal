@@ -47,11 +47,21 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
 
   const handleStatus = useCallback((_state: string, _message: string) => {}, []);
 
+  const handleWsTitleChange = useCallback((title: string) => {
+    if (!title || !activeId) return;
+    setTabs((prev) => {
+      const tab = prev.find((t) => t.id === activeId);
+      if (!tab || tab.name === title) return prev;
+      return prev.map((t) => (t.id === activeId ? { ...t, name: title } : t));
+    });
+  }, [activeId]);
+
   const { send, resize, connected, retries, maxRetries, reconnect } = useWebSocket({
     sessionId: activeId,
     token,
     onData: handleData,
     onStatus: handleStatus,
+    onTitleChange: handleWsTitleChange,
   });
 
   const handleTermData = useCallback(
@@ -99,6 +109,20 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
     }
   }, []);
 
+  const titleDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleTitleChange = useCallback((title: string) => {
+    if (!title || !activeId) return;
+    setTabs((prev) => {
+      const tab = prev.find((t) => t.id === activeId);
+      if (!tab || tab.name === title) return prev;
+      return prev.map((t) => (t.id === activeId ? { ...t, name: title } : t));
+    });
+    if (titleDebounceRef.current) clearTimeout(titleDebounceRef.current);
+    titleDebounceRef.current = setTimeout(() => {
+      api.patch(`/api/sessions/${activeId}`, { name: title }).catch(() => {});
+    }, 500);
+  }, [activeId]);
+
   const activeSession = tabs.find((t) => t.id === activeId);
 
   const handleNewSSH = useCallback(() => {
@@ -145,6 +169,7 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
           key={`${activeId}-${prefs.theme}-${prefs.fontSize}`}
           onData={handleTermData}
           onResize={handleResize}
+          onTitleChange={handleTitleChange}
           termRef={activeTermRef}
           prefs={prefs}
         />

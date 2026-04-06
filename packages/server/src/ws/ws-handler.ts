@@ -253,6 +253,16 @@ export function setupWebSocket(
     debounceCwdSave(sessionId, cwd);
   });
 
+  sshAdapter.on('error', (sessionId: string, err: Error) => {
+    const clients = sessionClients.get(sessionId);
+    if (!clients) return;
+    for (const ws of clients) {
+      if (ws.readyState === WebSocket.OPEN) {
+        sendStatus(ws, 'error', `SSH error: ${err.message}`);
+      }
+    }
+  });
+
   sshAdapter.on('exit', (sessionId: string, _code: number) => {
     const pendingSave = cwdSaveTimers.get(sessionId);
     if (pendingSave) {

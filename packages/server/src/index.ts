@@ -13,6 +13,8 @@ import { SSHAdapter } from './sessions/ssh-adapter.js';
 import { createSessionRouter } from './sessions/session-router.js';
 import { ConnectionManager } from './connections/connection-manager.js';
 import { createConnectionRouter } from './connections/connection-router.js';
+import { PreferencesManager } from './config/preferences-manager.js';
+import { createPreferencesRouter } from './config/preferences-router.js';
 import { setupWebSocket } from './ws/ws-handler.js';
 import { logger } from './logger.js';
 
@@ -24,6 +26,7 @@ export function createApp(opts?: { configDir?: string }) {
   const ptyAdapter = new LocalPtyAdapter();
   const sshAdapter = new SSHAdapter();
   const connectionManager = new ConnectionManager(opts?.configDir);
+  const preferencesManager = new PreferencesManager(opts?.configDir);
 
   const app = express();
   app.use(express.json());
@@ -51,6 +54,7 @@ export function createApp(opts?: { configDir?: string }) {
   const jwtMiddleware = createJwtMiddleware(configManager.getJwtSecret());
   app.use('/api/sessions', jwtMiddleware, createSessionRouter(sessionManager, ptyAdapter));
   app.use('/api/connections', jwtMiddleware, createConnectionRouter(connectionManager));
+  app.use('/api/preferences', jwtMiddleware, createPreferencesRouter(preferencesManager));
 
   const clientDist = path.resolve(__dirname, '../../client/dist');
   app.use(express.static(clientDist));

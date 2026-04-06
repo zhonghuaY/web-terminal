@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { api } from '../api/client';
 
 export interface Preferences {
   theme: string;
@@ -6,40 +7,36 @@ export interface Preferences {
   fontFamily: string;
 }
 
-const STORAGE_KEY = 'wt-preferences';
-
 const DEFAULTS: Preferences = {
   theme: 'Tokyo Night',
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace",
 };
 
-function load(): Preferences {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULTS };
-    return { ...DEFAULTS, ...JSON.parse(raw) };
-  } catch {
-    return { ...DEFAULTS };
-  }
-}
-
-function save(prefs: Preferences): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
-}
-
 export function usePreferences() {
-  const [prefs, setPrefs] = useState<Preferences>(load);
+  const [prefs, setPrefs] = useState<Preferences>(DEFAULTS);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    api.get<Preferences>('/api/preferences')
+      .then((remote) => {
+        setPrefs({ ...DEFAULTS, ...remote });
+        setLoaded(true);
+      })
+      .catch(() => {
+        setLoaded(true);
+      });
+  }, []);
 
   const update = useCallback((patch: Partial<Preferences>) => {
     setPrefs((prev) => {
       const next = { ...prev, ...patch };
-      save(next);
+      api.put<Preferences>('/api/preferences', next).catch(() => {});
       return next;
     });
   }, []);
 
-  return { prefs, update };
+  return { prefs, update, loaded };
 }
 
 export const FONT_FAMILIES = [

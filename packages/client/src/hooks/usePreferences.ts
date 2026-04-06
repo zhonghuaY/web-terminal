@@ -5,6 +5,9 @@ export interface Preferences {
   theme: string;
   fontSize: number;
   fontFamily: string;
+  lastView?: 'dashboard' | 'terminal';
+  lastSessionId?: string;
+  lastActiveTabIds?: string[];
 }
 
 const DEFAULTS: Preferences = {

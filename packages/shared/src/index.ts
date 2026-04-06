@@ -6,6 +6,7 @@ export interface Session {
   lastAccessed: string;
   sshConnectionId?: string;
   tmuxSession?: string;
+  restorable?: boolean;
 }
 
 export interface SSHConnection {
@@ -60,6 +61,9 @@ export interface UserPreferences {
   theme: string;
   fontSize: number;
   fontFamily: string;
+  lastView?: 'dashboard' | 'terminal';
+  lastSessionId?: string;
+  lastActiveTabIds?: string[];
 }
 
 export interface CreateSessionRequest {

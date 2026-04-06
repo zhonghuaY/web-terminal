@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from './hooks/useAuth';
+import { usePreferences } from './hooks/usePreferences';
+import { api } from './api/client';
 import LoginPage from './pages/LoginPage';
 import SetupPage from './pages/SetupPage';
 import DashboardPage from './pages/DashboardPage';
@@ -9,7 +11,39 @@ type View = { page: 'dashboard' } | { page: 'terminal'; sessionId: string };
 
 export default function App() {
   const { isAuthenticated, setupRequired, loading, error, login, setup, logout } = useAuth();
-  const [view, setView] = useState<View>({ page: 'dashboard' });
+  const { prefs, update: updatePrefs, loaded: prefsLoaded } = usePreferences();
+  const [view, setView] = useState<View | null>(null);
+  const restoredRef = useRef(false);
+
+  useEffect(() => {
+    if (!isAuthenticated || !prefsLoaded || restoredRef.current) return;
+    restoredRef.current = true;
+
+    if (prefs.lastView === 'terminal' && prefs.lastSessionId) {
+      api.get<{ id: string }[]>('/api/sessions').then((sessions) => {
+        const found = sessions.find((s) => s.id === prefs.lastSessionId);
+        if (found) {
+          setView({ page: 'terminal', sessionId: found.id });
+        } else {
+          setView({ page: 'dashboard' });
+        }
+      }).catch(() => {
+        setView({ page: 'dashboard' });
+      });
+    } else {
+      setView({ page: 'dashboard' });
+    }
+  }, [isAuthenticated, prefsLoaded, prefs.lastView, prefs.lastSessionId]);
+
+  const handleOpenTerminal = useCallback((sessionId: string) => {
+    setView({ page: 'terminal', sessionId });
+    updatePrefs({ lastView: 'terminal', lastSessionId: sessionId });
+  }, [updatePrefs]);
+
+  const handleBackToDashboard = useCallback(() => {
+    setView({ page: 'dashboard' });
+    updatePrefs({ lastView: 'dashboard', lastSessionId: undefined });
+  }, [updatePrefs]);
 
   if (loading && setupRequired === null) {
     return (
@@ -27,20 +61,28 @@ export default function App() {
     return <LoginPage onLogin={login} error={error} />;
   }
 
+  if (!view) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-950">
+        <div className="text-gray-400">Restoring session...</div>
+      </div>
+    );
+  }
+
   if (view.page === 'terminal') {
     const token = localStorage.getItem('wt-token') ?? '';
     return (
       <TerminalPage
         initialSessionId={view.sessionId}
         token={token}
-        onBackToDashboard={() => setView({ page: 'dashboard' })}
+        onBackToDashboard={handleBackToDashboard}
       />
     );
   }
 
   return (
     <DashboardPage
-      onOpenTerminal={(sessionId) => setView({ page: 'terminal', sessionId })}
+      onOpenTerminal={handleOpenTerminal}
       onLogout={logout}
     />
   );

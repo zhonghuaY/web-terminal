@@ -14,6 +14,7 @@ interface Session {
   createdAt: string;
   lastAccessed: string;
   sshConnectionId?: string;
+  restorable?: boolean;
 }
 
 interface SSHConnection {

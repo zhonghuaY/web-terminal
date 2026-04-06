@@ -41,6 +41,12 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
     });
   }, [initialSessionId]);
 
+  useEffect(() => {
+    if (activeId) {
+      api.put('/api/preferences', { lastView: 'terminal', lastSessionId: activeId }).catch(() => {});
+    }
+  }, [activeId]);
+
   const handleData = useCallback((data: string) => {
     activeTermRef.current?.write(data);
   }, []);

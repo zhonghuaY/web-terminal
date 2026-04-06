@@ -165,15 +165,6 @@ export function setupWebSocket(
       }
     }
 
-    const existingClients = sessionClients.get(sessionId);
-    if (existingClients) {
-      for (const existingWs of existingClients) {
-        if (existingWs !== ws && existingWs.readyState === WebSocket.OPEN) {
-          existingWs.close(4010, 'Replaced by new connection');
-        }
-      }
-    }
-
     addClient(ws, sessionId);
     sessionManager.touch(sessionId);
     sendStatus(ws, 'connected', `Attached to session ${session.name}`);

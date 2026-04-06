@@ -106,40 +106,44 @@ export class SSHAdapter extends EventEmitter {
     return this.channels.has(sessionId);
   }
 
-  private extractOscTitle(sessionId: string, data: string): void {
-    let buf = (this.titleBuffers.get(sessionId) ?? '') + data;
-    const OSC_RE = /\x1b\](?:0|2);([^\x07\x1b]*?)(?:\x07|\x1b\\)/g;
+  private extractOsc(
+    sessionId: string,
+    data: string,
+    buffers: Map<string, string>,
+    pattern: RegExp,
+    marker: string,
+    handler: (sessionId: string, value: string) => void,
+  ): void {
+    let buf = (buffers.get(sessionId) ?? '') + data;
     let match: RegExpExecArray | null;
-    while ((match = OSC_RE.exec(buf)) !== null) {
-      const title = match[1].trim();
-      if (title) {
-        this.emit('titleChange', sessionId, title);
-      }
+    while ((match = pattern.exec(buf)) !== null) {
+      const value = match[1].trim();
+      if (value) handler(sessionId, value);
     }
-    const lastOsc = buf.lastIndexOf('\x1b]');
+    const lastOsc = buf.lastIndexOf(marker);
     if (lastOsc >= 0 && !buf.slice(lastOsc).includes('\x07') && !buf.slice(lastOsc).includes('\x1b\\')) {
-      this.titleBuffers.set(sessionId, buf.slice(lastOsc));
+      buffers.set(sessionId, buf.slice(lastOsc));
     } else {
-      this.titleBuffers.delete(sessionId);
+      buffers.delete(sessionId);
     }
   }
 
+  private extractOscTitle(sessionId: string, data: string): void {
+    this.extractOsc(
+      sessionId, data, this.titleBuffers,
+      /\x1b\](?:0|2);([^\x07\x1b]*?)(?:\x07|\x1b\\)/g,
+      '\x1b]',
+      (sid, title) => this.emit('titleChange', sid, title),
+    );
+  }
+
   private extractOscCwd(sessionId: string, data: string): void {
-    let buf = (this.cwdBuffers.get(sessionId) ?? '') + data;
-    const OSC7_RE = /\x1b\]7;file:\/\/[^/]*([^\x07\x1b]*?)(?:\x07|\x1b\\)/g;
-    let match: RegExpExecArray | null;
-    while ((match = OSC7_RE.exec(buf)) !== null) {
-      const cwd = decodeURIComponent(match[1].trim());
-      if (cwd) {
-        this.emit('cwdChange', sessionId, cwd);
-      }
-    }
-    const lastOsc = buf.lastIndexOf('\x1b]7;');
-    if (lastOsc >= 0 && !buf.slice(lastOsc).includes('\x07') && !buf.slice(lastOsc).includes('\x1b\\')) {
-      this.cwdBuffers.set(sessionId, buf.slice(lastOsc));
-    } else {
-      this.cwdBuffers.delete(sessionId);
-    }
+    this.extractOsc(
+      sessionId, data, this.cwdBuffers,
+      /\x1b\]7;file:\/\/[^/]*([^\x07\x1b]*?)(?:\x07|\x1b\\)/g,
+      '\x1b]7;',
+      (sid, raw) => this.emit('cwdChange', sid, decodeURIComponent(raw)),
+    );
   }
 
   private cleanup(sessionId: string): void {

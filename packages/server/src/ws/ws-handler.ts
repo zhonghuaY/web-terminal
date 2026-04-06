@@ -9,6 +9,10 @@ import { ConnectionManager } from '../connections/connection-manager.js';
 
 const OUTPUT_BUFFER_INTERVAL_MS = 8;
 
+function shellQuote(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
 export function setupWebSocket(
   server: Server,
   jwtSecret: string,
@@ -159,9 +163,11 @@ export function setupWebSocket(
           }
 
           if (session.tmuxSession) {
-            sshAdapter.write(sessionId, `tmux a -t ${session.tmuxSession}\n`);
+            const safeName = shellQuote(session.tmuxSession);
+            sshAdapter.write(sessionId, `tmux a -t ${safeName}\n`);
           } else if (session.lastCwd) {
-            sshAdapter.write(sessionId, `cd ${session.lastCwd}\n`);
+            const safePath = shellQuote(session.lastCwd);
+            sshAdapter.write(sessionId, `cd ${safePath} && clear\n`);
           }
         }
       }
@@ -228,15 +234,36 @@ export function setupWebSocket(
   });
 
   const lastCwds = new Map<string, string>();
+  const cwdSaveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  const CWD_SAVE_DEBOUNCE_MS = 2000;
+
+  function debounceCwdSave(sessionId: string, cwd: string): void {
+    const existing = cwdSaveTimers.get(sessionId);
+    if (existing) clearTimeout(existing);
+    cwdSaveTimers.set(sessionId, setTimeout(() => {
+      cwdSaveTimers.delete(sessionId);
+      sessionManager.setCwd(sessionId, cwd);
+    }, CWD_SAVE_DEBOUNCE_MS));
+  }
 
   sshAdapter.on('cwdChange', (sessionId: string, cwd: string) => {
     const prev = lastCwds.get(sessionId);
     if (prev === cwd) return;
     lastCwds.set(sessionId, cwd);
-    sessionManager.setCwd(sessionId, cwd);
+    debounceCwdSave(sessionId, cwd);
   });
 
   sshAdapter.on('exit', (sessionId: string, _code: number) => {
+    const pendingSave = cwdSaveTimers.get(sessionId);
+    if (pendingSave) {
+      clearTimeout(pendingSave);
+      cwdSaveTimers.delete(sessionId);
+      const cwd = lastCwds.get(sessionId);
+      if (cwd) sessionManager.setCwd(sessionId, cwd);
+    }
+    lastCwds.delete(sessionId);
+    outputBuffers.delete(sessionId);
+
     const clients = sessionClients.get(sessionId);
     if (!clients) return;
     for (const ws of clients) {
@@ -305,7 +332,7 @@ export function setupWebSocket(
           const prevCwd = lastCwds.get(sessionId);
           if (prevCwd !== cwd) {
             lastCwds.set(sessionId, cwd);
-            sessionManager.setCwd(sessionId, cwd);
+            debounceCwdSave(sessionId, cwd);
           }
         }
       } catch {
@@ -323,6 +350,8 @@ export function setupWebSocket(
 
   wss.on('close', () => {
     clearInterval(titlePollTimer);
+    for (const timer of cwdSaveTimers.values()) clearTimeout(timer);
+    cwdSaveTimers.clear();
   });
 
   return wss;

@@ -90,6 +90,15 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
     setActiveId(session.id);
   }, []);
 
+  const handleRenameTab = useCallback(async (id: string, name: string) => {
+    try {
+      const updated = await api.patch<Session>(`/api/sessions/${id}`, { name });
+      setTabs((prev) => prev.map((t) => (t.id === id ? { ...t, name: updated.name } : t)));
+    } catch {
+      // rename failed silently
+    }
+  }, []);
+
   const activeSession = tabs.find((t) => t.id === activeId);
 
   const handleNewSSH = useCallback(() => {
@@ -122,6 +131,7 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
           onClose={handleCloseTab}
           onCreate={handleCreateTab}
           onBackToDashboard={onBackToDashboard}
+          onRename={handleRenameTab}
         />
       </div>
       <ReconnectBanner

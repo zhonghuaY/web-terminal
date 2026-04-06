@@ -217,6 +217,18 @@ export function setupWebSocket(
     ensureFlushTimer();
   });
 
+  sshAdapter.on('titleChange', (sessionId: string, title: string) => {
+    const prev = lastTitles.get(sessionId);
+    if (prev === title) return;
+    lastTitles.set(sessionId, title);
+
+    const session = sessionManager.get(sessionId);
+    if (session && session.name !== title) {
+      sessionManager.rename(sessionId, title);
+    }
+    sendTitleToClients(sessionId, title);
+  });
+
   sshAdapter.on('exit', (sessionId: string, _code: number) => {
     const clients = sessionClients.get(sessionId);
     if (!clients) return;

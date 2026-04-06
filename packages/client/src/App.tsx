@@ -20,10 +20,15 @@ export default function App() {
     restoredRef.current = true;
 
     if (prefs.lastView === 'terminal' && prefs.lastSessionId) {
-      api.get<{ id: string }[]>('/api/sessions').then((sessions) => {
-        const found = sessions.find((s) => s.id === prefs.lastSessionId);
-        if (found) {
-          setView({ page: 'terminal', sessionId: found.id });
+      api.get<{ id: string; restorable?: boolean }[]>('/api/sessions').then((sessions) => {
+        const savedTabIds = prefs.lastActiveTabIds ?? [];
+        const restorableIds = savedTabIds.filter((id) => sessions.find((s) => s.id === id && s.restorable !== false));
+        const activeId = restorableIds.includes(prefs.lastSessionId!)
+          ? prefs.lastSessionId!
+          : restorableIds[0];
+
+        if (activeId) {
+          setView({ page: 'terminal', sessionId: activeId });
         } else {
           setView({ page: 'dashboard' });
         }
@@ -33,7 +38,7 @@ export default function App() {
     } else {
       setView({ page: 'dashboard' });
     }
-  }, [isAuthenticated, prefsLoaded, prefs.lastView, prefs.lastSessionId]);
+  }, [isAuthenticated, prefsLoaded, prefs.lastView, prefs.lastSessionId, prefs.lastActiveTabIds]);
 
   const handleOpenTerminal = useCallback((sessionId: string) => {
     setView({ page: 'terminal', sessionId });

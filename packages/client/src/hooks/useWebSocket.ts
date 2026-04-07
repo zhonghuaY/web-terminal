@@ -14,11 +14,12 @@ interface UseWebSocketOpts {
   onData: (data: string) => void;
   onStatus: (state: string, message: string) => void;
   onTitleChange?: (title: string) => void;
+  getTermSize?: () => { cols: number; rows: number } | null;
 }
 
 const MAX_RETRIES = 20;
 
-export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange }: UseWebSocketOpts) {
+export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange, getTermSize }: UseWebSocketOpts) {
   const wsRef = useRef<WebSocket | null>(null);
   const retryRef = useRef(0);
   const [connected, setConnected] = useState(false);
@@ -31,6 +32,18 @@ export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange
   onStatusRef.current = onStatus;
   const onTitleChangeRef = useRef(onTitleChange);
   onTitleChangeRef.current = onTitleChange;
+  const getTermSizeRef = useRef(getTermSize);
+  getTermSizeRef.current = getTermSize;
+
+  function buildWsUrl() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    let url = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}&sessionId=${encodeURIComponent(sessionId)}`;
+    const size = getTermSizeRef.current?.();
+    if (size) {
+      url += `&cols=${size.cols}&rows=${size.rows}`;
+    }
+    return url;
+  }
 
   useEffect(() => {
     const gen = ++generationRef.current;
@@ -42,10 +55,7 @@ export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange
     function connect() {
       if (gen !== generationRef.current) return;
 
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}&sessionId=${encodeURIComponent(sessionId)}`;
-
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(buildWsUrl());
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -132,10 +142,7 @@ export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange
     }
     const gen = ++generationRef.current;
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}&sessionId=${encodeURIComponent(sessionId)}`;
-
-    const ws = new WebSocket(wsUrl);
+    const ws = new WebSocket(buildWsUrl());
     wsRef.current = ws;
 
     ws.onopen = () => {

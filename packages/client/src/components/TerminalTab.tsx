@@ -28,12 +28,18 @@ function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onC
     onTitleChange?.(sessionId, title);
   }, [sessionId, onTitleChange]);
 
+  const getTermSize = useCallback(() => {
+    const t = termRef.current;
+    return t ? { cols: t.cols, rows: t.rows } : null;
+  }, []);
+
   const { send, resize, connected, retries, maxRetries, reconnect } = useWebSocket({
     sessionId,
     token,
     onData: handleData,
     onStatus: handleStatus,
     onTitleChange: handleWsTitleChange,
+    getTermSize,
   });
 
   useEffect(() => {
@@ -58,6 +64,12 @@ function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onC
   const handleTermTitleChange = useCallback((title: string) => {
     onTitleChange?.(sessionId, title);
   }, [sessionId, onTitleChange]);
+
+  useEffect(() => {
+    if (connected && termRef.current) {
+      resize(termRef.current.cols, termRef.current.rows);
+    }
+  }, [connected, resize]);
 
   useEffect(() => {
     if (visible && termRef.current) {

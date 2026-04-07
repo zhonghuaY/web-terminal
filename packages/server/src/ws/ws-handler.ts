@@ -40,6 +40,7 @@ export function setupWebSocket(
   const sshConnecting = new Map<string, Promise<void>>();
 
   const outputBuffers = new Map<string, string[]>();
+  const sessionDimensions = new Map<string, { cols: number; rows: number }>();
   let flushTimer: ReturnType<typeof setInterval> | null = null;
 
   function addClient(ws: WebSocket, sessionId: string) {
@@ -110,6 +111,8 @@ export function setupWebSocket(
     const url = new URL(req.url ?? '', `http://${req.headers.host}`);
     const token = url.searchParams.get('token');
     const sessionId = url.searchParams.get('sessionId');
+    const initialCols = Math.max(parseInt(url.searchParams.get('cols') ?? '', 10) || 80, 2);
+    const initialRows = Math.max(parseInt(url.searchParams.get('rows') ?? '', 10) || 24, 2);
 
     if (!token || !sessionId) {
       sendStatus(ws, 'error', 'Missing token or sessionId');
@@ -132,16 +135,18 @@ export function setupWebSocket(
       return;
     }
 
+    sessionDimensions.set(sessionId, { cols: initialCols, rows: initialRows });
+
     if (session.type === 'local') {
       if (!ptyAdapter.isAttached(sessionId)) {
         if (session.shellMode === 'shell') {
-          ptyAdapter.createPlainSession(sessionId, 80, 24, session.lastCwd);
+          ptyAdapter.createPlainSession(sessionId, initialCols, initialRows, session.lastCwd);
         } else if (session.tmuxSession) {
-          ptyAdapter.attachExternal(sessionId, session.tmuxSession);
+          ptyAdapter.attachExternal(sessionId, session.tmuxSession, initialCols, initialRows);
         } else if (ptyAdapter.tmuxSessionExists(sessionId)) {
-          ptyAdapter.attach(sessionId);
+          ptyAdapter.attach(sessionId, initialCols, initialRows);
         } else {
-          ptyAdapter.createSession(sessionId, 80, 24, session.lastCwd);
+          ptyAdapter.createSession(sessionId, initialCols, initialRows, session.lastCwd);
         }
       }
     } else if (session.type === 'ssh') {
@@ -202,6 +207,7 @@ export function setupWebSocket(
             break;
           case 'resize':
             if (msg.cols && msg.rows) {
+              sessionDimensions.set(sessionId, { cols: msg.cols, rows: msg.rows });
               adapter.resize(sessionId, msg.cols, msg.rows);
             }
             break;
@@ -319,8 +325,9 @@ export function setupWebSocket(
       if (ptyAdapter.tmuxSessionExists(sessionId) || tmuxStillExists(tmuxName)) {
         sessionManager.setShellMode(sessionId, 'shell');
         const startDir = session.lastCwd || process.env.HOME || '/';
+        const dims = sessionDimensions.get(sessionId) ?? { cols: 80, rows: 24 };
         try {
-          ptyAdapter.createPlainSession(sessionId, 80, 24, startDir);
+          ptyAdapter.createPlainSession(sessionId, dims.cols, dims.rows, startDir);
           const clients = sessionClients.get(sessionId);
           if (clients) {
             for (const ws of clients) {

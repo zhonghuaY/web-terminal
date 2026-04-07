@@ -29,12 +29,19 @@ function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onC
     onTitleChange?.(sessionId, title);
   }, [sessionId, onTitleChange]);
 
+  const getTermSize = useCallback(() => {
+    const t = termRef.current;
+    if (!t) return null;
+    return { cols: t.cols, rows: t.rows };
+  }, []);
+
   const { send, resize, connected, retries, maxRetries, reconnect } = useWebSocket({
     sessionId,
     token,
     onData: handleData,
     onStatus: handleStatus,
     onTitleChange: handleWsTitleChange,
+    getTermSize,
   });
 
   connectedRef.current = connected;

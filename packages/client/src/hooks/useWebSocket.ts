@@ -14,11 +14,12 @@ interface UseWebSocketOpts {
   onData: (data: string) => void;
   onStatus: (state: string, message: string) => void;
   onTitleChange?: (title: string) => void;
+  getTermSize?: () => { cols: number; rows: number } | null;
 }
 
 const MAX_RETRIES = 20;
 
-export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange }: UseWebSocketOpts) {
+export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange, getTermSize }: UseWebSocketOpts) {
   const wsRef = useRef<WebSocket | null>(null);
   const retryRef = useRef(0);
   const [connected, setConnected] = useState(false);
@@ -31,6 +32,8 @@ export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange
   onStatusRef.current = onStatus;
   const onTitleChangeRef = useRef(onTitleChange);
   onTitleChangeRef.current = onTitleChange;
+  const getTermSizeRef = useRef(getTermSize);
+  getTermSizeRef.current = getTermSize;
 
   useEffect(() => {
     const gen = ++generationRef.current;
@@ -76,6 +79,10 @@ export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange
         retryRef.current = 0;
         setRetries(0);
         setConnected(true);
+        const size = getTermSizeRef.current?.();
+        if (size && size.cols > 0 && size.rows > 0) {
+          ws.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
+        }
       };
 
       ws.onmessage = handleMessage;
@@ -147,6 +154,10 @@ export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange
       retryRef.current = 0;
       setRetries(0);
       setConnected(true);
+      const size = getTermSizeRef.current?.();
+      if (size && size.cols > 0 && size.rows > 0) {
+        ws.send(JSON.stringify({ type: 'resize', cols: size.cols, rows: size.rows }));
+      }
     };
 
     ws.onmessage = (event) => {

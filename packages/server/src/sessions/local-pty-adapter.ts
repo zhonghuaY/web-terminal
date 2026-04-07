@@ -148,6 +148,18 @@ export class LocalPtyAdapter extends EventEmitter {
     pty.resize(cols, rows);
   }
 
+  /**
+   * Force a SIGWINCH by briefly changing dimensions then restoring.
+   * Guarantees the foreground process redraws even if dimensions match.
+   */
+  forceResize(sessionId: string, cols: number, rows: number): void {
+    const pty = this.ptyProcesses.get(sessionId);
+    if (!pty) return;
+    const jiggleCols = Math.max(cols - 1, 1);
+    pty.resize(jiggleCols, rows);
+    pty.resize(cols, rows);
+  }
+
   refreshTmuxClient(sessionId: string, tmuxSessionName?: string): void {
     const name = tmuxSessionName ?? `wt-${sessionId}`;
     try {

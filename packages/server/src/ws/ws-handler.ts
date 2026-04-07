@@ -155,7 +155,7 @@ export function setupWebSocket(
       const applyStoredDims = () => {
         const dims = sessionDimensions.get(sessionId);
         if (dims && dims.cols > 2 && dims.rows > 2 && ptyAdapter.isAttached(sessionId)) {
-          ptyAdapter.resize(sessionId, dims.cols, dims.rows);
+          ptyAdapter.forceResize(sessionId, dims.cols, dims.rows);
           if (session.tmuxSession || ptyAdapter.getSessionMode(sessionId) === 'tmux') {
             ptyAdapter.refreshTmuxClient(sessionId, session.tmuxSession);
           }
@@ -220,10 +220,20 @@ export function setupWebSocket(
             break;
           case 'resize':
             if (msg.cols && msg.rows) {
+              const prevDims = sessionDimensions.get(sessionId);
+              const dimsChanged = !prevDims || prevDims.cols !== msg.cols || prevDims.rows !== msg.rows;
               sessionDimensions.set(sessionId, { cols: msg.cols, rows: msg.rows });
-              adapter.resize(sessionId, msg.cols, msg.rows);
-              if (session.type === 'local' && (session.tmuxSession || ptyAdapter.getSessionMode(sessionId) === 'tmux')) {
-                ptyAdapter.refreshTmuxClient(sessionId, session.tmuxSession);
+              if (session.type === 'local') {
+                if (dimsChanged) {
+                  ptyAdapter.forceResize(sessionId, msg.cols, msg.rows);
+                } else {
+                  adapter.resize(sessionId, msg.cols, msg.rows);
+                }
+                if (session.tmuxSession || ptyAdapter.getSessionMode(sessionId) === 'tmux') {
+                  ptyAdapter.refreshTmuxClient(sessionId, session.tmuxSession);
+                }
+              } else {
+                adapter.resize(sessionId, msg.cols, msg.rows);
               }
             }
             break;
@@ -402,7 +412,7 @@ export function setupWebSocket(
                 if (wasNotTmux) {
                   sessionManager.setShellMode(sessionId, 'tmux');
                   const dims = sessionDimensions.get(sessionId);
-                  if (dims) ptyAdapter.resize(sessionId, dims.cols, dims.rows);
+                  if (dims) ptyAdapter.forceResize(sessionId, dims.cols, dims.rows);
                 }
                 sessionManager.setTmuxSession(sessionId, nestedTmux);
               }

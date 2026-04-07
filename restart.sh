@@ -22,15 +22,14 @@ kill_previous() {
   frpc_pid=$(pgrep -x frpc 2>/dev/null || true)
 
   local pids
-  pids=$(pgrep -f "tsx.*web_terminal" 2>/dev/null || true)
-  pids+=" $(pgrep -f "vite.*web_terminal" 2>/dev/null || true)"
-  pids+=" $(pgrep -f "concurrently.*web_terminal" 2>/dev/null || true)"
+  pids=$(pgrep -f "web_terminal/node_modules" 2>/dev/null || true)
+  pids+=" $(pgrep -f "tsx.*web_terminal" 2>/dev/null || true)"
+  pids+=" $(pgrep -f "web_terminal.*tsx" 2>/dev/null || true)"
   pids+=" $(lsof -ti:"${SERVER_PORT}" 2>/dev/null || true)"
   pids+=" $(lsof -ti:"${CLIENT_PORT}" 2>/dev/null || true)"
 
-  pids=$(echo "$pids" | tr ' ' '\n' | sort -u | grep -v '^$' || true)
+  pids=$(echo "$pids" | tr ' ' '\n' | sort -un | grep -v '^$' || true)
 
-  # Never kill frpc — it manages FRP tunnels for all WSL services
   if [ -n "$frpc_pid" ]; then
     pids=$(echo "$pids" | grep -v "^${frpc_pid}$" || true)
   fi
@@ -52,6 +51,16 @@ kill_previous() {
     if kill -0 "$pid" 2>/dev/null; then
       kill -9 "$pid" 2>/dev/null && warn "  Force killed PID $pid" || true
     fi
+  done
+
+  # Final sweep: kill anything still holding the ports
+  for port in "${SERVER_PORT}" "${CLIENT_PORT}"; do
+    local port_pids
+    port_pids=$(lsof -ti:"${port}" 2>/dev/null || true)
+    for pid in $port_pids; do
+      if [ -n "$frpc_pid" ] && [ "$pid" = "$frpc_pid" ]; then continue; fi
+      kill -9 "$pid" 2>/dev/null && warn "  Force killed PID $pid on port $port" || true
+    done
   done
 
   log "Previous processes stopped."

@@ -125,6 +125,9 @@ export class SessionManager {
     const session = this.sessions.get(id);
     if (session && session.shellMode !== mode) {
       session.shellMode = mode;
+      if (mode === 'shell') {
+        delete session.tmuxSession;
+      }
       this.save();
     }
   }

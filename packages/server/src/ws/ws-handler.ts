@@ -427,26 +427,33 @@ export function setupWebSocket(
     if (session?.type === 'local' && session.shellMode !== 'shell') {
       scrollbackBuffers.delete(sessionId);
       const tmuxName = session.tmuxSession ?? `wt-${sessionId}`;
-      if (ptyAdapter.tmuxSessionExists(sessionId) || tmuxStillExists(tmuxName)) {
+      const tmuxAlive = ptyAdapter.tmuxSessionExists(sessionId) || tmuxStillExists(tmuxName);
+
+      const clients = sessionClients.get(sessionId);
+      const hasClients = clients && clients.size > 0;
+
+      if (tmuxAlive && hasClients) {
+        // User detached (Ctrl+B D) while connected — switch to plain shell
         sessionManager.setShellMode(sessionId, 'shell');
         const startDir = session.lastCwd || process.env.HOME || '/';
         const dims = sessionDimensions.get(sessionId) ?? { cols: 80, rows: 24 };
         try {
           ptyAdapter.createPlainSession(sessionId, dims.cols, dims.rows, startDir);
-          const clients = sessionClients.get(sessionId);
-          if (clients) {
-            for (const ws of clients) {
-              if (ws.readyState === WebSocket.OPEN) {
-                sendStatus(ws, 'connected', 'Switched to plain shell');
-                const modeMsg: WsServerMessage = { type: 'modeChange', shellMode: 'shell' };
-                ws.send(JSON.stringify(modeMsg));
-              }
+          for (const ws of clients) {
+            if (ws.readyState === WebSocket.OPEN) {
+              sendStatus(ws, 'connected', 'Switched to plain shell');
+              const modeMsg: WsServerMessage = { type: 'modeChange', shellMode: 'shell' };
+              ws.send(JSON.stringify(modeMsg));
             }
           }
           return;
         } catch {
           // Fall through to normal disconnect
         }
+      } else if (tmuxAlive && !hasClients) {
+        // Last client disconnected — preserve tmux session info for re-attach
+        // Don't switch to shell mode; the tmux session will be re-attached on next connect
+        return;
       }
     }
 
@@ -534,7 +541,9 @@ export function setupWebSocket(
           continue;
         }
 
-        const cmd = await ptyAdapter.getPaneCommand(sessionId);
+        const session = sessionManager.get(sessionId);
+        const externalTmux = session?.tmuxSession;
+        const cmd = await ptyAdapter.getPaneCommand(sessionId, externalTmux);
 
         let resolvedTitle: string | null = null;
 
@@ -543,7 +552,7 @@ export function setupWebSocket(
         }
 
         if (!resolvedTitle) {
-          resolvedTitle = await ptyAdapter.getPaneTitle(sessionId);
+          resolvedTitle = await ptyAdapter.getPaneTitle(sessionId, externalTmux);
         }
 
         if (!resolvedTitle) continue;
@@ -551,14 +560,13 @@ export function setupWebSocket(
         if (prev === resolvedTitle) continue;
         lastTitles.set(sessionId, resolvedTitle);
 
-        const session = sessionManager.get(sessionId);
         if (session && session.name !== resolvedTitle) {
           sessionManager.rename(sessionId, resolvedTitle);
         }
 
         sendTitleToClients(sessionId, resolvedTitle);
 
-        const cwd = await ptyAdapter.getPaneCwd(sessionId);
+        const cwd = await ptyAdapter.getPaneCwd(sessionId, externalTmux);
         if (cwd) {
           const prevCwd = lastCwds.get(sessionId);
           if (prevCwd !== cwd) {

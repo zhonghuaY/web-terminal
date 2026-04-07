@@ -273,11 +273,11 @@ export class LocalPtyAdapter extends EventEmitter {
     this.sessionModes.set(sessionId, 'tmux');
   }
 
-  async getPaneTitle(sessionId: string): Promise<string | null> {
-    const tmuxName = `wt-${sessionId}`;
+  async getPaneTitle(sessionId: string, tmuxSessionName?: string): Promise<string | null> {
+    const tmuxName = tmuxSessionName ?? `wt-${sessionId}`;
     try {
       const { stdout } = await execAsync(
-        `tmux display-message -p -t ${tmuxName} '#{pane_title}' 2>/dev/null`,
+        `tmux display-message -p -t ${shellQuote(tmuxName)} '#{pane_title}' 2>/dev/null`,
       );
       return stdout.trim() || null;
     } catch {
@@ -285,11 +285,11 @@ export class LocalPtyAdapter extends EventEmitter {
     }
   }
 
-  async getPaneCwd(sessionId: string): Promise<string | null> {
-    const tmuxName = `wt-${sessionId}`;
+  async getPaneCwd(sessionId: string, tmuxSessionName?: string): Promise<string | null> {
+    const tmuxName = tmuxSessionName ?? `wt-${sessionId}`;
     try {
       const { stdout } = await execAsync(
-        `tmux display-message -p -t ${tmuxName} '#{pane_current_path}' 2>/dev/null`,
+        `tmux display-message -p -t ${shellQuote(tmuxName)} '#{pane_current_path}' 2>/dev/null`,
       );
       return stdout.trim() || null;
     } catch {
@@ -297,11 +297,11 @@ export class LocalPtyAdapter extends EventEmitter {
     }
   }
 
-  async getPaneCommand(sessionId: string): Promise<string | null> {
-    const tmuxName = `wt-${sessionId}`;
+  async getPaneCommand(sessionId: string, tmuxSessionName?: string): Promise<string | null> {
+    const tmuxName = tmuxSessionName ?? `wt-${sessionId}`;
     try {
       const { stdout } = await execAsync(
-        `tmux display-message -p -t ${tmuxName} '#{pane_current_command}' 2>/dev/null`,
+        `tmux display-message -p -t ${shellQuote(tmuxName)} '#{pane_current_command}' 2>/dev/null`,
       );
       return stdout.trim() || null;
     } catch {

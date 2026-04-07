@@ -18,9 +18,21 @@ interface Props {
 function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onConnectionChange, sendRef, reconnectRef }: Props) {
   const termRef = useRef<XTerm | null>(null);
   const connectedRef = useRef(false);
+  const pendingDataRef = useRef<string[]>([]);
 
   const handleData = useCallback((data: string) => {
-    termRef.current?.write(data);
+    const term = termRef.current;
+    if (term) {
+      // Flush any buffered data first
+      if (pendingDataRef.current.length > 0) {
+        const buffered = pendingDataRef.current.join('');
+        pendingDataRef.current.length = 0;
+        term.write(buffered);
+      }
+      term.write(data);
+    } else {
+      pendingDataRef.current.push(data);
+    }
   }, []);
 
   const handleStatus = useCallback((_state: string, _message: string) => {}, []);
@@ -80,12 +92,25 @@ function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onC
 
   useEffect(() => {
     if (!connected) return;
+
+    // Flush any data that arrived before xterm was initialized
+    const flushPending = () => {
+      const term = termRef.current;
+      if (term && pendingDataRef.current.length > 0) {
+        const buffered = pendingDataRef.current.join('');
+        pendingDataRef.current.length = 0;
+        term.write(buffered);
+      }
+    };
+    flushPending();
+    const tf = setTimeout(flushPending, 50);
+
     sendCurrentSize();
     const t1 = setTimeout(sendCurrentSize, 50);
     const t2 = setTimeout(sendCurrentSize, 200);
     const t3 = setTimeout(sendCurrentSize, 500);
     const t4 = setTimeout(sendCurrentSize, 1000);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+    return () => { clearTimeout(tf); clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
   }, [connected, sendCurrentSize]);
 
   useEffect(() => {

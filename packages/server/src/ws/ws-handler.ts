@@ -141,7 +141,8 @@ export function setupWebSocket(
     sessionManager.touch(sessionId);
 
     if (session.type === 'local') {
-      if (!ptyAdapter.isAttached(sessionId)) {
+      const wasAlreadyAttached = ptyAdapter.isAttached(sessionId);
+      if (!wasAlreadyAttached) {
         if (session.shellMode === 'shell') {
           ptyAdapter.createPlainSession(sessionId, 80, 24, session.lastCwd);
         } else if (session.tmuxSession) {
@@ -164,6 +165,10 @@ export function setupWebSocket(
       setTimeout(applyStoredDims, 100);
       setTimeout(applyStoredDims, 500);
       setTimeout(applyStoredDims, 1500);
+
+      // For reconnecting clients: forceResize triggers SIGWINCH which causes
+      // shell to redraw its prompt and tmux to redraw its screen.
+      // The staggered applyStoredDims above handles this.
     } else if (session.type === 'ssh') {
       if (!sshAdapter.isConnected(sessionId) && session.sshConnectionId) {
         const existing = sshConnecting.get(sessionId);

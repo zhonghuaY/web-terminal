@@ -317,7 +317,6 @@ export function setupWebSocket(
     if (session?.type === 'local' && session.shellMode !== 'shell') {
       const tmuxName = session.tmuxSession ?? `wt-${sessionId}`;
       if (ptyAdapter.tmuxSessionExists(sessionId) || tmuxStillExists(tmuxName)) {
-        session.shellMode = 'shell';
         sessionManager.setShellMode(sessionId, 'shell');
         const startDir = session.lastCwd || process.env.HOME || '/';
         try {

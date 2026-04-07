@@ -137,6 +137,9 @@ export function setupWebSocket(
 
     sessionDimensions.set(sessionId, { cols: initialCols, rows: initialRows });
 
+    addClient(ws, sessionId);
+    sessionManager.touch(sessionId);
+
     if (session.type === 'local') {
       if (!ptyAdapter.isAttached(sessionId)) {
         if (session.shellMode === 'shell') {
@@ -148,6 +151,8 @@ export function setupWebSocket(
         } else {
           ptyAdapter.createSession(sessionId, initialCols, initialRows, session.lastCwd);
         }
+      } else {
+        ptyAdapter.resize(sessionId, initialCols, initialRows);
       }
     } else if (session.type === 'ssh') {
       if (!sshAdapter.isConnected(sessionId) && session.sshConnectionId) {
@@ -191,8 +196,6 @@ export function setupWebSocket(
       }
     }
 
-    addClient(ws, sessionId);
-    sessionManager.touch(sessionId);
     sendStatus(ws, 'connected', `Attached to session ${session.name}`);
 
     ws.on('message', (raw) => {

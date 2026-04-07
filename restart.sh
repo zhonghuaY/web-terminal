@@ -4,6 +4,7 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_NAME="web-terminal"
 SERVER_PORT=8090
+CLIENT_PORT=5174
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -25,6 +26,7 @@ kill_previous() {
   pids+=" $(pgrep -f "vite.*web_terminal" 2>/dev/null || true)"
   pids+=" $(pgrep -f "concurrently.*web_terminal" 2>/dev/null || true)"
   pids+=" $(lsof -ti:"${SERVER_PORT}" 2>/dev/null || true)"
+  pids+=" $(lsof -ti:"${CLIENT_PORT}" 2>/dev/null || true)"
 
   pids=$(echo "$pids" | tr ' ' '\n' | sort -u | grep -v '^$' || true)
 

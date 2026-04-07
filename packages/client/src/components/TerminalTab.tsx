@@ -68,6 +68,12 @@ function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onC
   useEffect(() => {
     if (connected && termRef.current) {
       resize(termRef.current.cols, termRef.current.rows);
+      const timer = setTimeout(() => {
+        if (termRef.current) {
+          resize(termRef.current.cols, termRef.current.rows);
+        }
+      }, 300);
+      return () => clearTimeout(timer);
     }
   }, [connected, resize]);
 

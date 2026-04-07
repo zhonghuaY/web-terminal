@@ -151,9 +151,13 @@ export function setupWebSocket(
         } else {
           ptyAdapter.createSession(sessionId, initialCols, initialRows, session.lastCwd);
         }
-      } else {
-        ptyAdapter.resize(sessionId, initialCols, initialRows);
       }
+      setTimeout(() => {
+        const dims = sessionDimensions.get(sessionId);
+        if (dims && ptyAdapter.isAttached(sessionId)) {
+          ptyAdapter.resize(sessionId, dims.cols, dims.rows);
+        }
+      }, 150);
     } else if (session.type === 'ssh') {
       if (!sshAdapter.isConnected(sessionId) && session.sshConnectionId) {
         const existing = sshConnecting.get(sessionId);
@@ -386,7 +390,11 @@ export function setupWebSocket(
               const wasNotTmux = session.shellMode !== 'tmux';
               const tmuxChanged = session.tmuxSession !== nestedTmux;
               if (wasNotTmux || tmuxChanged) {
-                if (wasNotTmux) sessionManager.setShellMode(sessionId, 'tmux');
+                if (wasNotTmux) {
+                  sessionManager.setShellMode(sessionId, 'tmux');
+                  const dims = sessionDimensions.get(sessionId);
+                  if (dims) ptyAdapter.resize(sessionId, dims.cols, dims.rows);
+                }
                 sessionManager.setTmuxSession(sessionId, nestedTmux);
               }
             }

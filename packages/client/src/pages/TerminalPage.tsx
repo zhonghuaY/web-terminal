@@ -33,6 +33,7 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
 
   const activeSendRef = useRef<((data: string) => void) | null>(null);
   const activeReconnectRef = useRef<(() => void) | null>(null);
+  const activeForceFitRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     api.get<Session[]>('/api/sessions').then((sessions) => {
@@ -144,6 +145,10 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
     activeReconnectRef.current?.();
   }, []);
 
+  const handleForceFit = useCallback(() => {
+    activeForceFitRef.current?.();
+  }, []);
+
   const handleSendToActive = useCallback((data: string) => {
     activeSendRef.current?.(data);
   }, []);
@@ -157,6 +162,7 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
         onSettings={handleShowSettings}
         onCloseTab={handleCloseActiveTab}
         onReconnect={handleReconnect}
+        onForceFit={handleForceFit}
         connected={activeConnected}
         sessionName={activeSession?.name ?? ''}
         sessionType={activeSession?.type ?? 'local'}
@@ -190,6 +196,7 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
             onConnectionChange={handleConnectionChange}
             sendRef={tab.id === activeId ? activeSendRef : undefined}
             reconnectRef={tab.id === activeId ? activeReconnectRef : undefined}
+            forceFitRef={tab.id === activeId ? activeForceFitRef : undefined}
           />
         ))}
       </div>

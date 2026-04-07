@@ -3,6 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { SearchAddon } from '@xterm/addon-search';
+import { ClipboardAddon } from '@xterm/addon-clipboard';
 import '@xterm/xterm/css/xterm.css';
 import { getThemeByName } from '../themes';
 import type { Preferences } from '../hooks/usePreferences';
@@ -55,15 +56,19 @@ function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, pref
       fontFamily: prefs.fontFamily,
       theme: themeObj.theme,
       scrollback: 10000,
+      rightClickSelectsWord: true,
+      allowProposedApi: true,
     });
 
     const fitAddon = new FitAddon();
     const webLinksAddon = new WebLinksAddon();
     const searchAddon = new SearchAddon();
+    const clipboardAddon = new ClipboardAddon();
 
     term.loadAddon(fitAddon);
     term.loadAddon(webLinksAddon);
     term.loadAddon(searchAddon);
+    term.loadAddon(clipboardAddon);
     term.open(containerRef.current);
 
     requestAnimationFrame(() => {
@@ -97,10 +102,28 @@ function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, pref
     term.onResize(({ cols, rows }) => onResizeRef.current(cols, rows));
     term.onTitleChange((title) => onTitleChangeRef.current?.(title));
 
+    term.onSelectionChange(() => {
+      const sel = term.getSelection();
+      if (sel) {
+        navigator.clipboard.writeText(sel).catch(() => {});
+      }
+    });
+
     const handleKeyboard = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'F') {
         e.preventDefault();
         setSearchOpen((v) => !v);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
+        e.preventDefault();
+        const sel = term.getSelection();
+        if (sel) navigator.clipboard.writeText(sel).catch(() => {});
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'V') {
+        e.preventDefault();
+        navigator.clipboard.readText().then((text) => {
+          if (text) onDataRef.current(text);
+        }).catch(() => {});
       }
     };
     document.addEventListener('keydown', handleKeyboard);

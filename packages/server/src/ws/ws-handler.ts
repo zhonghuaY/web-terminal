@@ -134,10 +134,10 @@ export function setupWebSocket(
 
     if (session.type === 'local') {
       if (!ptyAdapter.isAttached(sessionId)) {
-        if (session.tmuxSession) {
-          ptyAdapter.attachExternal(sessionId, session.tmuxSession);
-        } else if (session.shellMode === 'shell') {
+        if (session.shellMode === 'shell') {
           ptyAdapter.createPlainSession(sessionId, 80, 24, session.lastCwd);
+        } else if (session.tmuxSession) {
+          ptyAdapter.attachExternal(sessionId, session.tmuxSession);
         } else if (ptyAdapter.tmuxSessionExists(sessionId)) {
           ptyAdapter.attach(sessionId);
         } else {

@@ -10,6 +10,44 @@ import { ConnectionManager } from '../connections/connection-manager.js';
 import { execSync } from 'node:child_process';
 
 const OUTPUT_BUFFER_INTERVAL_MS = 8;
+const SCROLLBACK_BUFFER_SIZE = 128 * 1024; // 128 KB per session
+
+class ScrollbackBuffer {
+  private chunks: string[] = [];
+  private totalLength = 0;
+  private readonly maxSize: number;
+
+  constructor(maxSize = SCROLLBACK_BUFFER_SIZE) {
+    this.maxSize = maxSize;
+  }
+
+  append(data: string): void {
+    this.chunks.push(data);
+    this.totalLength += data.length;
+    this.trim();
+  }
+
+  private trim(): void {
+    while (this.totalLength > this.maxSize && this.chunks.length > 1) {
+      const removed = this.chunks.shift()!;
+      this.totalLength -= removed.length;
+    }
+    if (this.totalLength > this.maxSize && this.chunks.length === 1) {
+      const excess = this.totalLength - this.maxSize;
+      this.chunks[0] = this.chunks[0].slice(excess);
+      this.totalLength = this.chunks[0].length;
+    }
+  }
+
+  getContent(): string {
+    return this.chunks.join('');
+  }
+
+  clear(): void {
+    this.chunks.length = 0;
+    this.totalLength = 0;
+  }
+}
 
 function shellQuote(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'";
@@ -40,8 +78,29 @@ export function setupWebSocket(
   const sshConnecting = new Map<string, Promise<void>>();
 
   const outputBuffers = new Map<string, string[]>();
+  const scrollbackBuffers = new Map<string, ScrollbackBuffer>();
   const sessionDimensions = new Map<string, { cols: number; rows: number }>();
   let flushTimer: ReturnType<typeof setInterval> | null = null;
+
+  function getScrollback(sessionId: string): ScrollbackBuffer {
+    let buf = scrollbackBuffers.get(sessionId);
+    if (!buf) {
+      buf = new ScrollbackBuffer();
+      scrollbackBuffers.set(sessionId, buf);
+    }
+    return buf;
+  }
+
+  function replayScrollback(ws: WebSocket, sessionId: string): void {
+    const buf = scrollbackBuffers.get(sessionId);
+    if (!buf) return;
+    const content = buf.getContent();
+    if (!content) return;
+    const msg: WsServerMessage = { type: 'output', data: content };
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    }
+  }
 
   function addClient(ws: WebSocket, sessionId: string) {
     clientSessions.set(ws, sessionId);
@@ -67,6 +126,8 @@ export function setupWebSocket(
   }
 
   function broadcastToSession(sessionId: string, data: string) {
+    getScrollback(sessionId).append(data);
+
     const clients = sessionClients.get(sessionId);
     if (!clients) return;
     const msg: WsServerMessage = { type: 'output', data };
@@ -211,6 +272,7 @@ export function setupWebSocket(
       }
     }
 
+    replayScrollback(ws, sessionId);
     sendStatus(ws, 'connected', `Attached to session ${session.name}`);
 
     ws.on('message', (raw) => {
@@ -257,7 +319,6 @@ export function setupWebSocket(
           if (mode === 'tmux') {
             ptyAdapter.detach(sid);
           }
-          // Plain shell: keep pty alive so user can reconnect within the same server lifetime
           outputBuffers.delete(sid);
         }
       }
@@ -327,6 +388,7 @@ export function setupWebSocket(
     }
     lastCwds.delete(sessionId);
     outputBuffers.delete(sessionId);
+    scrollbackBuffers.delete(sessionId);
 
     const clients = sessionClients.get(sessionId);
     if (!clients) return;
@@ -352,6 +414,7 @@ export function setupWebSocket(
 
     const session = sessionManager.get(sessionId);
     if (session?.type === 'local' && session.shellMode !== 'shell') {
+      scrollbackBuffers.delete(sessionId);
       const tmuxName = session.tmuxSession ?? `wt-${sessionId}`;
       if (ptyAdapter.tmuxSessionExists(sessionId) || tmuxStillExists(tmuxName)) {
         sessionManager.setShellMode(sessionId, 'shell');
@@ -375,6 +438,8 @@ export function setupWebSocket(
         }
       }
     }
+
+    scrollbackBuffers.delete(sessionId);
 
     const clients = sessionClients.get(sessionId);
     if (!clients) return;

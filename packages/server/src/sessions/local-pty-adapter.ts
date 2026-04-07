@@ -7,6 +7,10 @@ import type { TmuxSessionInfo } from '@web-terminal/shared';
 
 const execAsync = promisify(exec);
 
+function shellQuote(s: string): string {
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
 export interface PtyEvents {
   data: (data: string) => void;
   exit: (code: number) => void;
@@ -140,7 +144,23 @@ export class LocalPtyAdapter extends EventEmitter {
 
   resize(sessionId: string, cols: number, rows: number): void {
     const pty = this.ptyProcesses.get(sessionId);
-    if (pty) pty.resize(cols, rows);
+    if (!pty) return;
+    pty.resize(cols, rows);
+  }
+
+  refreshTmuxClient(sessionId: string, tmuxSessionName?: string): void {
+    const name = tmuxSessionName ?? `wt-${sessionId}`;
+    try {
+      execSync(`tmux list-clients -t ${shellQuote(name)} -F '#{client_tty}' 2>/dev/null`, { encoding: 'utf8' })
+        .trim()
+        .split('\n')
+        .filter(Boolean)
+        .forEach(tty => {
+          try {
+            execSync(`tmux refresh-client -t ${shellQuote(tty)} 2>/dev/null`);
+          } catch { /* ignore */ }
+        });
+    } catch { /* ignore */ }
   }
 
   destroy(sessionId: string): void {

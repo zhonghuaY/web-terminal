@@ -6,6 +6,8 @@ import { SessionManager } from '../sessions/session-manager.js';
 import { LocalPtyAdapter } from '../sessions/local-pty-adapter.js';
 import { SSHAdapter } from '../sessions/ssh-adapter.js';
 import { ConnectionManager } from '../connections/connection-manager.js';
+import { PreferencesManager } from '../config/preferences-manager.js';
+import { HighlightFilter } from '../terminal/highlight-filter.js';
 
 import { execSync } from 'node:child_process';
 
@@ -69,6 +71,7 @@ export function setupWebSocket(
   ptyAdapter: LocalPtyAdapter,
   sshAdapter: SSHAdapter,
   connectionManager: ConnectionManager,
+  preferencesManager?: PreferencesManager,
 ): WebSocketServer {
   const wss = new WebSocketServer({ server, path: '/ws' });
   const authService = new AuthService(jwtSecret);
@@ -81,6 +84,14 @@ export function setupWebSocket(
   const scrollbackBuffers = new Map<string, ScrollbackBuffer>();
   const sessionDimensions = new Map<string, { cols: number; rows: number }>();
   let flushTimer: ReturnType<typeof setInterval> | null = null;
+
+  const highlightFilter = new HighlightFilter();
+
+  function applyHighlight(data: string): string {
+    const enabled = preferencesManager?.get().highlightKeywords ?? true;
+    highlightFilter.setEnabled(enabled);
+    return highlightFilter.apply(data);
+  }
 
   function getScrollback(sessionId: string): ScrollbackBuffer {
     let buf = scrollbackBuffers.get(sessionId);
@@ -326,12 +337,12 @@ export function setupWebSocket(
   });
 
   ptyAdapter.on('data', (sessionId: string, data: string) => {
-    enqueueOutput(sessionId, data);
+    enqueueOutput(sessionId, applyHighlight(data));
     ensureFlushTimer();
   });
 
   sshAdapter.on('data', (sessionId: string, data: string) => {
-    enqueueOutput(sessionId, data);
+    enqueueOutput(sessionId, applyHighlight(data));
     ensureFlushTimer();
   });
 

@@ -7,6 +7,7 @@ interface Props {
   onSettings: () => void;
   onCloseTab: () => void;
   onReconnect: () => void;
+  onForceFit: () => void;
   connected: boolean;
   sessionName: string;
   sessionType: 'local' | 'ssh';
@@ -24,6 +25,7 @@ export default memo(function MenuBar({
   onSettings,
   onCloseTab,
   onReconnect,
+  onForceFit,
   connected,
   sessionName,
   sessionType,
@@ -56,6 +58,8 @@ export default memo(function MenuBar({
     {
       label: 'View',
       items: [
+        { label: 'Fit to Screen', shortcut: 'Ctrl+Shift+R', action: onForceFit },
+        { label: '', action: () => {}, divider: true },
         { label: 'Settings', action: onSettings },
       ],
     },

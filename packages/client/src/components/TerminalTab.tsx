@@ -13,10 +13,12 @@ interface Props {
   onConnectionChange?: (sessionId: string, connected: boolean, retries: number) => void;
   sendRef?: React.MutableRefObject<((data: string) => void) | null>;
   reconnectRef?: React.MutableRefObject<(() => void) | null>;
+  forceFitRef?: React.MutableRefObject<(() => void) | null>;
 }
 
-function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onConnectionChange, sendRef, reconnectRef }: Props) {
+function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onConnectionChange, sendRef, reconnectRef, forceFitRef }: Props) {
   const termRef = useRef<XTerm | null>(null);
+  const fitAddonRef = useRef<import('@xterm/addon-fit').FitAddon | null>(null);
   const connectedRef = useRef(false);
   const pendingDataRef = useRef<string[]>([]);
 
@@ -62,10 +64,21 @@ function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onC
     onConnectionChange?.(sessionId, connected, retries);
   }, [sessionId, connected, retries, onConnectionChange]);
 
+  const forceFit = useCallback(() => {
+    const addon = fitAddonRef.current;
+    if (!addon) return;
+    addon.fit();
+    const t = termRef.current;
+    if (t && connectedRef.current) {
+      resize(t.cols, t.rows);
+    }
+  }, [resize]);
+
   useEffect(() => {
     if (visible && sendRef) sendRef.current = send;
     if (visible && reconnectRef) reconnectRef.current = reconnect;
-  }, [visible, send, reconnect, sendRef, reconnectRef]);
+    if (visible && forceFitRef) forceFitRef.current = forceFit;
+  }, [visible, send, reconnect, forceFit, sendRef, reconnectRef, forceFitRef]);
 
   const handleTermData = useCallback(
     (data: string) => send(data),
@@ -136,6 +149,7 @@ function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onC
         onResize={handleResize}
         onTitleChange={handleTermTitleChange}
         termRef={termRef}
+        fitAddonRef={fitAddonRef}
         prefs={prefs}
         visible={visible}
       />

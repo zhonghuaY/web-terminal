@@ -13,11 +13,12 @@ interface Props {
   onResize: (cols: number, rows: number) => void;
   onTitleChange?: (title: string) => void;
   termRef: React.MutableRefObject<XTerm | null>;
+  fitAddonRef?: React.MutableRefObject<FitAddon | null>;
   prefs: Preferences;
   visible?: boolean;
 }
 
-function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, prefs, visible = true }: Props) {
+function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, fitAddonRef: externalFitAddonRef, prefs, visible = true }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
@@ -91,6 +92,7 @@ function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, pref
     });
 
     fitAddonRef.current = fitAddon;
+    if (externalFitAddonRef) externalFitAddonRef.current = fitAddon;
     searchAddonRef.current = searchAddon;
     termRef.current = term;
 

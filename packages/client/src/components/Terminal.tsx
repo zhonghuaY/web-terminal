@@ -98,6 +98,17 @@ function TerminalComponentInner({ onData, onResize, onTitleChange, termRef, pref
     onResizeRef.current(term.cols, term.rows);
     const initialFitTimer = setTimeout(() => fitAddon.fit(), 100);
 
+    term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        const num = parseInt(e.key, 10);
+        if (num >= 1 && num <= 9) return false;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
+        if (e.key === 'C' || e.key === 'V' || e.key === 'F') return false;
+      }
+      return true;
+    });
+
     term.onData((data) => onDataRef.current(data));
     term.onResize(({ cols, rows }) => onResizeRef.current(cols, rows));
     term.onTitleChange((title) => onTitleChangeRef.current?.(title));

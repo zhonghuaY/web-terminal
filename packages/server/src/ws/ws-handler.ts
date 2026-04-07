@@ -355,7 +355,7 @@ export function setupWebSocket(
     }
   });
 
-  const TITLE_POLL_INTERVAL_MS = 3000;
+  const TITLE_POLL_INTERVAL_MS = 1000;
   const lastTitles = new Map<string, string>();
 
   function sendTitleToClients(sessionId: string, title: string) {
@@ -375,21 +375,48 @@ export function setupWebSocket(
         const mode = ptyAdapter.getSessionMode(sessionId);
 
         if (mode === 'shell') {
-          const cwd = await ptyAdapter.getPlainSessionCwd(sessionId);
-          if (cwd) {
-            const prevCwd = lastCwds.get(sessionId);
-            if (prevCwd !== cwd) {
-              lastCwds.set(sessionId, cwd);
-              debounceCwdSave(sessionId, cwd);
+          const nestedTmux = await ptyAdapter.detectTmuxInPlainShell(sessionId);
+          const session = sessionManager.get(sessionId);
 
-              const home = process.env.HOME ?? '';
-              const displayPath = home && cwd.startsWith(home)
-                ? '~' + cwd.slice(home.length)
-                : cwd;
-              const prev = lastTitles.get(sessionId);
-              if (prev !== displayPath) {
-                lastTitles.set(sessionId, displayPath);
-                sendTitleToClients(sessionId, displayPath);
+          if (nestedTmux) {
+            if (session) {
+              const wasNotTmux = session.shellMode !== 'tmux';
+              const tmuxChanged = session.tmuxSession !== nestedTmux;
+              if (wasNotTmux || tmuxChanged) {
+                if (wasNotTmux) sessionManager.setShellMode(sessionId, 'tmux');
+                sessionManager.setTmuxSession(sessionId, nestedTmux);
+              }
+            }
+
+            const title = `tmux: ${nestedTmux}`;
+            const prev = lastTitles.get(sessionId);
+            if (prev !== title) {
+              lastTitles.set(sessionId, title);
+              if (session) sessionManager.rename(sessionId, title);
+              sendTitleToClients(sessionId, title);
+            }
+          } else {
+            if (session && (session.shellMode === 'tmux' || session.tmuxSession)) {
+              sessionManager.setShellMode(sessionId, 'shell');
+            }
+
+            const cwd = await ptyAdapter.getPlainSessionCwd(sessionId);
+            if (cwd) {
+              const prevCwd = lastCwds.get(sessionId);
+              if (prevCwd !== cwd) {
+                lastCwds.set(sessionId, cwd);
+                debounceCwdSave(sessionId, cwd);
+
+                const home = process.env.HOME ?? '';
+                const displayPath = home && cwd.startsWith(home)
+                  ? '~' + cwd.slice(home.length)
+                  : cwd;
+                const prev = lastTitles.get(sessionId);
+                if (prev !== displayPath) {
+                  lastTitles.set(sessionId, displayPath);
+                  if (session) sessionManager.rename(sessionId, displayPath);
+                  sendTitleToClients(sessionId, displayPath);
+                }
               }
             }
           }

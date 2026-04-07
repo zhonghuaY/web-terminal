@@ -38,11 +38,17 @@ export class SessionManager {
             execSync(`tmux has-session -t ${tmuxName} 2>/dev/null`);
             session.restorable = true;
           } catch {
-            const age = Date.now() - new Date(session.lastAccessed).getTime();
-            if (age > staleThreshold) {
-              staleIds.push(id);
+            if (session.lastCwd) {
+              session.shellMode = 'shell';
+              delete session.tmuxSession;
+              session.restorable = true;
+            } else {
+              const age = Date.now() - new Date(session.lastAccessed).getTime();
+              if (age > staleThreshold) {
+                staleIds.push(id);
+              }
+              session.restorable = false;
             }
-            session.restorable = false;
           }
         }
       } else if (session.type === 'ssh') {

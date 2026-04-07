@@ -311,6 +311,57 @@ export class LocalPtyAdapter extends EventEmitter {
     }
   }
 
+  async detectTmuxInPlainShell(sessionId: string): Promise<string | null> {
+    const pty = this.ptyProcesses.get(sessionId);
+    if (!pty) return null;
+    const pid = pty.pid;
+    try {
+      const { stdout: children } = await execAsync(
+        `pgrep -P ${pid} 2>/dev/null || true`,
+      );
+      for (const childPid of children.trim().split('\n').filter(Boolean)) {
+        try {
+          const { stdout: cmdline } = await execAsync(
+            `cat /proc/${childPid}/cmdline 2>/dev/null | tr '\\0' ' '`,
+          );
+          const parts = cmdline.trim().split(/\s+/);
+          const isTmux = parts[0]?.includes('tmux');
+          if (!isTmux) continue;
+
+          const isAttach = parts.includes('attach-session') || parts.includes('attach') || parts.includes('a');
+          const isNew = parts.includes('new-session') || parts.includes('new');
+          if (!isAttach && !isNew) continue;
+
+          const tIdx = parts.indexOf('-t');
+          if (tIdx >= 0 && parts[tIdx + 1]) {
+            return parts[tIdx + 1];
+          }
+
+          if (isNew) {
+            const sIdx = parts.indexOf('-s');
+            if (sIdx >= 0 && parts[sIdx + 1]) {
+              return parts[sIdx + 1];
+            }
+          }
+
+          // tmux attach without -t attaches to the most recent session
+          if (isAttach) {
+            try {
+              const { stdout: sessions } = await execAsync(
+                'tmux list-sessions -F "#{session_name}" 2>/dev/null',
+              );
+              const names = sessions.trim().split('\n').filter(Boolean);
+              if (names.length > 0) return names[names.length - 1];
+            } catch { /* ignore */ }
+          }
+        } catch { /* ignore */ }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   getActiveSessionIds(): string[] {
     return Array.from(this.ptyProcesses.keys());
   }

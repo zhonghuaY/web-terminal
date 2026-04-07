@@ -29,10 +29,20 @@ describe('HighlightFilter', () => {
     expect(result).toContain('\x1b[4;34mhttps://example.com/path\x1b[0m');
   });
 
-  it('does not modify text inside existing ANSI sequences', () => {
-    const colored = '\x1b[32merror in green\x1b[0m';
-    const result = filter.apply(colored);
-    expect(result).toBe(colored);
+  it('preserves ANSI escape sequences themselves', () => {
+    const input = '\x1b[32mhello\x1b[0m world';
+    const result = filter.apply(input);
+    expect(result).toContain('\x1b[32m');
+    expect(result).toContain('\x1b[0m');
+    expect(result).toContain('hello');
+    expect(result).toContain('world');
+  });
+
+  it('highlights keywords even after colored text (e.g. bash prompt)', () => {
+    const input = '\x1b[01;32malbert@host\x1b[00m:\x1b[01;34m~\x1b[00m$ echo error warning';
+    const result = filter.apply(input);
+    expect(result).toContain('\x1b[1;31merror\x1b[0m');
+    expect(result).toContain('\x1b[1;33mwarning\x1b[0m');
   });
 
   it('returns text unchanged when disabled', () => {
@@ -70,5 +80,30 @@ describe('HighlightFilter', () => {
     expect(f.apply('error')).toBe('error');
     f.setEnabled(true);
     expect(f.apply('error')).toContain('\x1b[1;31m');
+  });
+
+  it('highlights keywords in lines with mixed ANSI and plain text', () => {
+    const input = '\x1b[36m2026-04-07\x1b[0m error connecting to 192.168.0.1 - warning: timeout';
+    const result = filter.apply(input);
+    expect(result).toContain('\x1b[1;31merror\x1b[0m');
+    expect(result).toContain('\x1b[36m192.168.0.1\x1b[0m');
+    expect(result).toContain('\x1b[1;33mwarning\x1b[0m');
+  });
+
+  it('handles multiline text with keywords on every line', () => {
+    const input = 'line1 error here\nline2 warning there\nline3 ok done';
+    const result = filter.apply(input);
+    expect(result).toContain('\x1b[1;31merror\x1b[0m');
+    expect(result).toContain('\x1b[1;33mwarning\x1b[0m');
+    expect(result).toContain('\x1b[1;32mok\x1b[0m');
+    expect(result).toContain('\x1b[1;32mdone\x1b[0m');
+  });
+
+  it('does not corrupt ANSI escape codes in the output', () => {
+    const input = '\x1b[1;34mblue text\x1b[0m normal error text';
+    const result = filter.apply(input);
+    expect(result).toContain('\x1b[1;34m');
+    expect(result).toContain('\x1b[1;31merror\x1b[0m');
+    expect(result.indexOf('\x1b[1;34m')).toBeLessThan(result.indexOf('\x1b[1;31merror'));
   });
 });

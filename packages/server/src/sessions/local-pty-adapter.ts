@@ -99,8 +99,9 @@ export class LocalPtyAdapter extends EventEmitter {
     try {
       execSync(`tmux set-option -t ${tmuxName} set-titles on 2>/dev/null`);
       execSync(`tmux set-option -t ${tmuxName} allow-passthrough on 2>/dev/null`);
+      execSync(`tmux set-option -t ${tmuxName} set-clipboard on 2>/dev/null`);
     } catch {
-      // Older tmux may not support allow-passthrough
+      // Older tmux may not support some options
     }
   }
 
@@ -247,6 +248,8 @@ export class LocalPtyAdapter extends EventEmitter {
 
   attachExternal(sessionId: string, tmuxName: string, cols = 80, rows = 24): void {
     if (this.ptyProcesses.has(sessionId)) return;
+
+    this.enableTmuxTitlePassthrough(tmuxName);
 
     const pty = ptySpawn('tmux', ['attach-session', '-t', tmuxName], {
       name: 'xterm-256color',

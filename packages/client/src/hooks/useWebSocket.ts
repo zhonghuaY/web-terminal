@@ -14,12 +14,11 @@ interface UseWebSocketOpts {
   onData: (data: string) => void;
   onStatus: (state: string, message: string) => void;
   onTitleChange?: (title: string) => void;
-  getTermSize?: () => { cols: number; rows: number } | null;
 }
 
 const MAX_RETRIES = 20;
 
-export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange, getTermSize }: UseWebSocketOpts) {
+export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange }: UseWebSocketOpts) {
   const wsRef = useRef<WebSocket | null>(null);
   const retryRef = useRef(0);
   const [connected, setConnected] = useState(false);
@@ -32,18 +31,6 @@ export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange
   onStatusRef.current = onStatus;
   const onTitleChangeRef = useRef(onTitleChange);
   onTitleChangeRef.current = onTitleChange;
-  const getTermSizeRef = useRef(getTermSize);
-  getTermSizeRef.current = getTermSize;
-
-  function buildWsUrl() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    let url = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}&sessionId=${encodeURIComponent(sessionId)}`;
-    const size = getTermSizeRef.current?.();
-    if (size) {
-      url += `&cols=${size.cols}&rows=${size.rows}`;
-    }
-    return url;
-  }
 
   useEffect(() => {
     const gen = ++generationRef.current;
@@ -52,10 +39,33 @@ export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange
 
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
+    function buildUrl() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}&sessionId=${encodeURIComponent(sessionId)}`;
+    }
+
+    function handleMessage(event: MessageEvent) {
+      if (gen !== generationRef.current) return;
+      try {
+        const msg = JSON.parse(event.data) as WsMessage;
+        if (msg.type === 'output' && msg.data) {
+          onDataRef.current(msg.data);
+        } else if (msg.type === 'status') {
+          onStatusRef.current(msg.state ?? 'unknown', msg.message ?? '');
+          if (msg.state === 'connected') setConnected(true);
+          if (msg.state === 'disconnected') setConnected(false);
+        } else if (msg.type === 'titleChange' && msg.title) {
+          onTitleChangeRef.current?.(msg.title);
+        }
+      } catch {
+        // Ignore malformed
+      }
+    }
+
     function connect() {
       if (gen !== generationRef.current) return;
 
-      const ws = new WebSocket(buildWsUrl());
+      const ws = new WebSocket(buildUrl());
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -68,23 +78,7 @@ export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange
         setConnected(true);
       };
 
-      ws.onmessage = (event) => {
-        if (gen !== generationRef.current) return;
-        try {
-          const msg = JSON.parse(event.data) as WsMessage;
-          if (msg.type === 'output' && msg.data) {
-            onDataRef.current(msg.data);
-          } else if (msg.type === 'status') {
-            onStatusRef.current(msg.state ?? 'unknown', msg.message ?? '');
-            if (msg.state === 'connected') setConnected(true);
-            if (msg.state === 'disconnected') setConnected(false);
-          } else if (msg.type === 'titleChange' && msg.title) {
-            onTitleChangeRef.current?.(msg.title);
-          }
-        } catch {
-          // Ignore malformed
-        }
-      };
+      ws.onmessage = handleMessage;
 
       ws.onclose = () => {
         if (gen !== generationRef.current) return;
@@ -142,7 +136,10 @@ export function useWebSocket({ sessionId, token, onData, onStatus, onTitleChange
     }
     const gen = ++generationRef.current;
 
-    const ws = new WebSocket(buildWsUrl());
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${window.location.host}/ws?token=${encodeURIComponent(token)}&sessionId=${encodeURIComponent(sessionId)}`;
+
+    const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {

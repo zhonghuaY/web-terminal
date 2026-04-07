@@ -17,6 +17,7 @@ interface Props {
 
 function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onConnectionChange, sendRef, reconnectRef }: Props) {
   const termRef = useRef<XTerm | null>(null);
+  const connectedRef = useRef(false);
 
   const handleData = useCallback((data: string) => {
     termRef.current?.write(data);
@@ -28,19 +29,15 @@ function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onC
     onTitleChange?.(sessionId, title);
   }, [sessionId, onTitleChange]);
 
-  const getTermSize = useCallback(() => {
-    const t = termRef.current;
-    return t ? { cols: t.cols, rows: t.rows } : null;
-  }, []);
-
   const { send, resize, connected, retries, maxRetries, reconnect } = useWebSocket({
     sessionId,
     token,
     onData: handleData,
     onStatus: handleStatus,
     onTitleChange: handleWsTitleChange,
-    getTermSize,
   });
+
+  connectedRef.current = connected;
 
   useEffect(() => {
     onConnectionChange?.(sessionId, connected, retries);
@@ -56,8 +53,17 @@ function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onC
     [send],
   );
 
+  const sendCurrentSize = useCallback(() => {
+    const t = termRef.current;
+    if (t && connectedRef.current) {
+      resize(t.cols, t.rows);
+    }
+  }, [resize]);
+
   const handleResize = useCallback(
-    (cols: number, rows: number) => resize(cols, rows),
+    (cols: number, rows: number) => {
+      resize(cols, rows);
+    },
     [resize],
   );
 
@@ -66,24 +72,23 @@ function TerminalTabInner({ sessionId, token, prefs, visible, onTitleChange, onC
   }, [sessionId, onTitleChange]);
 
   useEffect(() => {
-    if (connected && termRef.current) {
-      resize(termRef.current.cols, termRef.current.rows);
-      const timer = setTimeout(() => {
-        if (termRef.current) {
-          resize(termRef.current.cols, termRef.current.rows);
-        }
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [connected, resize]);
+    if (!connected) return;
+    sendCurrentSize();
+    const t1 = setTimeout(sendCurrentSize, 50);
+    const t2 = setTimeout(sendCurrentSize, 200);
+    const t3 = setTimeout(sendCurrentSize, 500);
+    const t4 = setTimeout(sendCurrentSize, 1000);
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); clearTimeout(t4); };
+  }, [connected, sendCurrentSize]);
 
   useEffect(() => {
     if (visible && termRef.current) {
       requestAnimationFrame(() => {
         termRef.current?.focus();
+        sendCurrentSize();
       });
     }
-  }, [visible]);
+  }, [visible, sendCurrentSize]);
 
   return (
     <div

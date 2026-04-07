@@ -111,8 +111,6 @@ export function setupWebSocket(
     const url = new URL(req.url ?? '', `http://${req.headers.host}`);
     const token = url.searchParams.get('token');
     const sessionId = url.searchParams.get('sessionId');
-    const initialCols = Math.max(parseInt(url.searchParams.get('cols') ?? '', 10) || 80, 2);
-    const initialRows = Math.max(parseInt(url.searchParams.get('rows') ?? '', 10) || 24, 2);
 
     if (!token || !sessionId) {
       sendStatus(ws, 'error', 'Missing token or sessionId');
@@ -135,7 +133,9 @@ export function setupWebSocket(
       return;
     }
 
-    sessionDimensions.set(sessionId, { cols: initialCols, rows: initialRows });
+    if (!sessionDimensions.has(sessionId)) {
+      sessionDimensions.set(sessionId, { cols: 80, rows: 24 });
+    }
 
     addClient(ws, sessionId);
     sessionManager.touch(sessionId);
@@ -143,21 +143,24 @@ export function setupWebSocket(
     if (session.type === 'local') {
       if (!ptyAdapter.isAttached(sessionId)) {
         if (session.shellMode === 'shell') {
-          ptyAdapter.createPlainSession(sessionId, initialCols, initialRows, session.lastCwd);
+          ptyAdapter.createPlainSession(sessionId, 80, 24, session.lastCwd);
         } else if (session.tmuxSession) {
-          ptyAdapter.attachExternal(sessionId, session.tmuxSession, initialCols, initialRows);
+          ptyAdapter.attachExternal(sessionId, session.tmuxSession);
         } else if (ptyAdapter.tmuxSessionExists(sessionId)) {
-          ptyAdapter.attach(sessionId, initialCols, initialRows);
+          ptyAdapter.attach(sessionId);
         } else {
-          ptyAdapter.createSession(sessionId, initialCols, initialRows, session.lastCwd);
+          ptyAdapter.createSession(sessionId, 80, 24, session.lastCwd);
         }
       }
-      setTimeout(() => {
+      const applyStoredDims = () => {
         const dims = sessionDimensions.get(sessionId);
-        if (dims && ptyAdapter.isAttached(sessionId)) {
+        if (dims && dims.cols > 2 && dims.rows > 2 && ptyAdapter.isAttached(sessionId)) {
           ptyAdapter.resize(sessionId, dims.cols, dims.rows);
         }
-      }, 150);
+      };
+      setTimeout(applyStoredDims, 100);
+      setTimeout(applyStoredDims, 500);
+      setTimeout(applyStoredDims, 1500);
     } else if (session.type === 'ssh') {
       if (!sshAdapter.isConnected(sessionId) && session.sshConnectionId) {
         const existing = sshConnecting.get(sessionId);

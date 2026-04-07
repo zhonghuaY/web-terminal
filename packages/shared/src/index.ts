@@ -64,6 +64,7 @@ export interface UserPreferences {
   theme: string;
   fontSize: number;
   fontFamily: string;
+  highlightKeywords?: boolean;
   lastView?: 'dashboard' | 'terminal';
   lastSessionId?: string;
   lastActiveTabIds?: string[];

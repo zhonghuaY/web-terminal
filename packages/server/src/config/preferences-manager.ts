@@ -6,6 +6,7 @@ export interface UserPreferences {
   theme: string;
   fontSize: number;
   fontFamily: string;
+  highlightKeywords?: boolean;
   lastView?: 'dashboard' | 'terminal';
   lastSessionId?: string;
   lastActiveTabIds?: string[];
@@ -15,6 +16,7 @@ const DEFAULTS: UserPreferences = {
   theme: 'Tokyo Night',
   fontSize: 14,
   fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace",
+  highlightKeywords: true,
 };
 
 const DEFAULT_CONFIG_DIR = path.join(os.homedir(), '.web-terminal');
@@ -52,6 +54,7 @@ export class PreferencesManager {
     if (patch.theme !== undefined) this.prefs.theme = patch.theme;
     if (patch.fontSize !== undefined) this.prefs.fontSize = patch.fontSize;
     if (patch.fontFamily !== undefined) this.prefs.fontFamily = patch.fontFamily;
+    if (patch.highlightKeywords !== undefined) this.prefs.highlightKeywords = patch.highlightKeywords;
     if (patch.lastView !== undefined) this.prefs.lastView = patch.lastView;
     if (patch.lastSessionId !== undefined) this.prefs.lastSessionId = patch.lastSessionId;
     if (patch.lastActiveTabIds !== undefined) this.prefs.lastActiveTabIds = patch.lastActiveTabIds;

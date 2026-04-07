@@ -74,6 +74,27 @@ export default function SettingsPage({ prefs, onUpdate, onClose }: Props) {
               ))}
             </select>
           </div>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="block text-sm font-medium text-gray-300">Keyword Highlighting</label>
+              <p className="text-xs text-gray-500">
+                Highlight errors, warnings, IPs, and URLs in terminal output
+              </p>
+            </div>
+            <button
+              onClick={() => onUpdate({ highlightKeywords: !prefs.highlightKeywords })}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
+                prefs.highlightKeywords !== false ? 'bg-blue-500' : 'bg-gray-600'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                  prefs.highlightKeywords !== false ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
         </div>
       </div>
     </div>

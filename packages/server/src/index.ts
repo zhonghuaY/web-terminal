@@ -69,14 +69,14 @@ export function createApp(opts?: { configDir?: string }) {
     res.sendFile(path.join(clientDist, 'index.html'));
   });
 
-  return { app, configManager, sessionManager, ptyAdapter, sshAdapter, connectionManager };
+  return { app, configManager, sessionManager, ptyAdapter, sshAdapter, connectionManager, preferencesManager };
 }
 
 if (process.argv[1] && !process.argv[1].includes('vitest')) {
-  const { app, configManager, sessionManager, ptyAdapter, sshAdapter, connectionManager } = createApp();
+  const { app, configManager, sessionManager, ptyAdapter, sshAdapter, connectionManager, preferencesManager } = createApp();
   const server = http.createServer(app);
 
-  setupWebSocket(server, configManager.getJwtSecret(), sessionManager, ptyAdapter, sshAdapter, connectionManager);
+  setupWebSocket(server, configManager.getJwtSecret(), sessionManager, ptyAdapter, sshAdapter, connectionManager, preferencesManager);
 
   const port = parseInt(process.env.PORT || '8090', 10);
   const host = process.env.HOST || '0.0.0.0';

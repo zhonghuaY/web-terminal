@@ -90,7 +90,7 @@ export default function TerminalPage({ initialSessionId, token, onBackToDashboar
   );
 
   const handleCreateTab = useCallback(async () => {
-    const session = await api.post<Session>('/api/sessions', { type: 'local' });
+    const session = await api.post<Session>('/api/sessions', { type: 'local', shellMode: 'shell' });
     setTabs((prev) => [...prev, session]);
     setActiveId(session.id);
   }, []);

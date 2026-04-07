@@ -12,10 +12,68 @@ export interface PtyEvents {
   exit: (code: number) => void;
 }
 
+export type SessionMode = 'shell' | 'tmux';
+
 export class LocalPtyAdapter extends EventEmitter {
   private ptyProcesses = new Map<string, IPty>();
+  private sessionModes = new Map<string, SessionMode>();
 
-  createSession(sessionId: string, cols = 80, rows = 24, startDir?: string): void {
+  getSessionMode(sessionId: string): SessionMode {
+    return this.sessionModes.get(sessionId) ?? 'tmux';
+  }
+
+  createPlainSession(sessionId: string, cols = 80, rows = 24, startDir?: string): void {
+    if (this.ptyProcesses.has(sessionId)) return;
+
+    const cwd = startDir && fs.existsSync(startDir) ? startDir : process.env.HOME ?? '/';
+    const shell = process.env.SHELL || '/bin/bash';
+
+    const pty = ptySpawn(shell, [], {
+      name: 'xterm-256color',
+      cols,
+      rows,
+      cwd,
+      env: process.env as Record<string, string>,
+    });
+
+    pty.onData((data: string) => {
+      this.emit('data', sessionId, data);
+    });
+
+    pty.onExit(({ exitCode }: { exitCode: number }) => {
+      this.ptyProcesses.delete(sessionId);
+      this.sessionModes.delete(sessionId);
+      this.emit('exit', sessionId, exitCode);
+    });
+
+    this.ptyProcesses.set(sessionId, pty);
+    this.sessionModes.set(sessionId, 'shell');
+  }
+
+  async getPlainSessionCwd(sessionId: string): Promise<string | null> {
+    const pty = this.ptyProcesses.get(sessionId);
+    if (!pty) return null;
+    const pid = pty.pid;
+    try {
+      // Find the deepest foreground child process to get the actual working directory
+      const { stdout: children } = await execAsync(
+        `pgrep -P ${pid} 2>/dev/null || true`,
+      );
+      const childPids = children.trim().split('\n').filter(Boolean);
+      const targetPid = childPids.length > 0 ? childPids[childPids.length - 1] : String(pid);
+      const link = await fs.promises.readlink(`/proc/${targetPid}/cwd`);
+      return link || null;
+    } catch {
+      try {
+        const link = await fs.promises.readlink(`/proc/${pid}/cwd`);
+        return link || null;
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  createTmuxSession(sessionId: string, cols = 80, rows = 24, startDir?: string): void {
     const tmuxName = `wt-${sessionId}`;
 
     try {
@@ -26,7 +84,11 @@ export class LocalPtyAdapter extends EventEmitter {
     }
 
     this.enableTmuxTitlePassthrough(tmuxName);
-    this.attach(sessionId, cols, rows);
+    this.attachTmux(sessionId, cols, rows);
+  }
+
+  createSession(sessionId: string, cols = 80, rows = 24, startDir?: string): void {
+    this.createTmuxSession(sessionId, cols, rows, startDir);
   }
 
   private enableTmuxTitlePassthrough(tmuxName: string): void {
@@ -36,6 +98,10 @@ export class LocalPtyAdapter extends EventEmitter {
     } catch {
       // Older tmux may not support allow-passthrough
     }
+  }
+
+  attachTmux(sessionId: string, cols = 80, rows = 24): void {
+    this.attach(sessionId, cols, rows);
   }
 
   attach(sessionId: string, cols = 80, rows = 24): void {
@@ -59,10 +125,12 @@ export class LocalPtyAdapter extends EventEmitter {
 
     pty.onExit(({ exitCode }: { exitCode: number }) => {
       this.ptyProcesses.delete(sessionId);
+      this.sessionModes.delete(sessionId);
       this.emit('exit', sessionId, exitCode);
     });
 
     this.ptyProcesses.set(sessionId, pty);
+    this.sessionModes.set(sessionId, 'tmux');
   }
 
   write(sessionId: string, data: string): void {
@@ -76,23 +144,33 @@ export class LocalPtyAdapter extends EventEmitter {
   }
 
   destroy(sessionId: string): void {
-    const tmuxName = `wt-${sessionId}`;
+    const mode = this.sessionModes.get(sessionId) ?? 'tmux';
     const pty = this.ptyProcesses.get(sessionId);
     if (pty) {
       pty.kill();
       this.ptyProcesses.delete(sessionId);
     }
+    this.sessionModes.delete(sessionId);
 
-    try {
-      execSync(`tmux kill-session -t ${tmuxName} 2>/dev/null`);
-    } catch {
-      // Session may not exist
+    if (mode === 'tmux') {
+      const tmuxName = `wt-${sessionId}`;
+      try {
+        execSync(`tmux kill-session -t ${tmuxName} 2>/dev/null`);
+      } catch {
+        // Session may not exist
+      }
     }
   }
 
   detach(sessionId: string): void {
+    const mode = this.sessionModes.get(sessionId) ?? 'tmux';
     const pty = this.ptyProcesses.get(sessionId);
     if (pty) {
+      if (mode === 'shell') {
+        // Plain shell: don't kill the process, just detach the event listeners
+        // Actually for plain shells, detach = keep process alive is not possible
+        // since there's no tmux to persist. We just remove from map.
+      }
       pty.kill();
       this.ptyProcesses.delete(sessionId);
     }
@@ -152,10 +230,12 @@ export class LocalPtyAdapter extends EventEmitter {
 
     pty.onExit(({ exitCode }: { exitCode: number }) => {
       this.ptyProcesses.delete(sessionId);
+      this.sessionModes.delete(sessionId);
       this.emit('exit', sessionId, exitCode);
     });
 
     this.ptyProcesses.set(sessionId, pty);
+    this.sessionModes.set(sessionId, 'tmux');
   }
 
   async getPaneTitle(sessionId: string): Promise<string | null> {
@@ -239,5 +319,6 @@ export class LocalPtyAdapter extends EventEmitter {
     for (const [id] of this.ptyProcesses) {
       this.destroy(id);
     }
+    this.sessionModes.clear();
   }
 }

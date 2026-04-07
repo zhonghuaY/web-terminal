@@ -7,10 +7,21 @@ import { LocalPtyAdapter } from '../sessions/local-pty-adapter.js';
 import { SSHAdapter } from '../sessions/ssh-adapter.js';
 import { ConnectionManager } from '../connections/connection-manager.js';
 
+import { execSync } from 'node:child_process';
+
 const OUTPUT_BUFFER_INTERVAL_MS = 8;
 
 function shellQuote(s: string): string {
   return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+function tmuxStillExists(tmuxName: string): boolean {
+  try {
+    execSync(`tmux has-session -t ${shellQuote(tmuxName)} 2>/dev/null`);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function setupWebSocket(
@@ -125,6 +136,8 @@ export function setupWebSocket(
       if (!ptyAdapter.isAttached(sessionId)) {
         if (session.tmuxSession) {
           ptyAdapter.attachExternal(sessionId, session.tmuxSession);
+        } else if (session.shellMode === 'shell') {
+          ptyAdapter.createPlainSession(sessionId, 80, 24, session.lastCwd);
         } else if (ptyAdapter.tmuxSessionExists(sessionId)) {
           ptyAdapter.attach(sessionId);
         } else {
@@ -203,7 +216,11 @@ export function setupWebSocket(
       if (sid && session.type === 'local') {
         const remaining = sessionClients.get(sid);
         if (!remaining || remaining.size === 0) {
-          ptyAdapter.detach(sid);
+          const mode = ptyAdapter.getSessionMode(sid);
+          if (mode === 'tmux') {
+            ptyAdapter.detach(sid);
+          }
+          // Plain shell: keep pty alive so user can reconnect within the same server lifetime
           outputBuffers.delete(sid);
         }
       }
@@ -285,7 +302,43 @@ export function setupWebSocket(
   });
 
   ptyAdapter.on('exit', (sessionId: string, _code: number) => {
+    const pendingSave = cwdSaveTimers.get(sessionId);
+    if (pendingSave) {
+      clearTimeout(pendingSave);
+      cwdSaveTimers.delete(sessionId);
+      const cwd = lastCwds.get(sessionId);
+      if (cwd) sessionManager.setCwd(sessionId, cwd);
+    }
+    lastCwds.delete(sessionId);
+    lastTitles.delete(sessionId);
     outputBuffers.delete(sessionId);
+
+    const session = sessionManager.get(sessionId);
+    if (session?.type === 'local' && session.shellMode !== 'shell') {
+      const tmuxName = session.tmuxSession ?? `wt-${sessionId}`;
+      if (ptyAdapter.tmuxSessionExists(sessionId) || tmuxStillExists(tmuxName)) {
+        session.shellMode = 'shell';
+        sessionManager.setShellMode(sessionId, 'shell');
+        const startDir = session.lastCwd || process.env.HOME || '/';
+        try {
+          ptyAdapter.createPlainSession(sessionId, 80, 24, startDir);
+          const clients = sessionClients.get(sessionId);
+          if (clients) {
+            for (const ws of clients) {
+              if (ws.readyState === WebSocket.OPEN) {
+                sendStatus(ws, 'connected', 'Switched to plain shell');
+                const modeMsg: WsServerMessage = { type: 'modeChange', shellMode: 'shell' };
+                ws.send(JSON.stringify(modeMsg));
+              }
+            }
+          }
+          return;
+        } catch {
+          // Fall through to normal disconnect
+        }
+      }
+    }
+
     const clients = sessionClients.get(sessionId);
     if (!clients) return;
     for (const ws of clients) {
@@ -313,6 +366,30 @@ export function setupWebSocket(
     const activeIds = ptyAdapter.getActiveSessionIds();
     for (const sessionId of activeIds) {
       try {
+        const mode = ptyAdapter.getSessionMode(sessionId);
+
+        if (mode === 'shell') {
+          const cwd = await ptyAdapter.getPlainSessionCwd(sessionId);
+          if (cwd) {
+            const prevCwd = lastCwds.get(sessionId);
+            if (prevCwd !== cwd) {
+              lastCwds.set(sessionId, cwd);
+              debounceCwdSave(sessionId, cwd);
+
+              const home = process.env.HOME ?? '';
+              const displayPath = home && cwd.startsWith(home)
+                ? '~' + cwd.slice(home.length)
+                : cwd;
+              const prev = lastTitles.get(sessionId);
+              if (prev !== displayPath) {
+                lastTitles.set(sessionId, displayPath);
+                sendTitleToClients(sessionId, displayPath);
+              }
+            }
+          }
+          continue;
+        }
+
         const cmd = await ptyAdapter.getPaneCommand(sessionId);
 
         let resolvedTitle: string | null = null;

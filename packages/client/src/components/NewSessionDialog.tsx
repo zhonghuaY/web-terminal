@@ -11,7 +11,7 @@ interface SSHConnection {
 
 interface Props {
   connections: SSHConnection[];
-  onCreate: (type: 'local' | 'ssh', name?: string, sshConnectionId?: string, tmuxSession?: string) => Promise<void>;
+  onCreate: (type: 'local' | 'ssh', name?: string, sshConnectionId?: string, tmuxSession?: string, shellMode?: 'shell' | 'tmux') => Promise<void>;
   onClose: () => void;
 }
 
@@ -40,11 +40,13 @@ export default function NewSessionDialog({ connections, onCreate, onClose }: Pro
     setLoading(true);
     try {
       const tmux = type === 'local' && localMode === 'tmux' ? selectedTmux : undefined;
+      const mode = type === 'local' ? (localMode === 'tmux' ? 'tmux' as const : 'shell' as const) : undefined;
       await onCreate(
         type,
         name || undefined,
         type === 'ssh' ? sshConnectionId : undefined,
         tmux,
+        mode,
       );
     } finally {
       setLoading(false);

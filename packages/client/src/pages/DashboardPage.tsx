@@ -65,8 +65,8 @@ export default function DashboardPage({ onOpenTerminal, onLogout }: Props) {
     fetchConnections();
   }, [fetchSessions, fetchConnections]);
 
-  const handleCreateSession = async (type: 'local' | 'ssh', name?: string, sshConnectionId?: string, tmuxSession?: string) => {
-    const session = await api.post<Session>('/api/sessions', { type, name, sshConnectionId, tmuxSession });
+  const handleCreateSession = async (type: 'local' | 'ssh', name?: string, sshConnectionId?: string, tmuxSession?: string, shellMode?: 'shell' | 'tmux') => {
+    const session = await api.post<Session>('/api/sessions', { type, name, sshConnectionId, tmuxSession, shellMode });
     setSessions((prev) => [...prev, session]);
     setShowNewSession(false);
     onOpenTerminal(session.id);

@@ -30,16 +30,20 @@ export class SessionManager {
 
     for (const [id, session] of this.sessions) {
       if (session.type === 'local') {
-        const tmuxName = session.tmuxSession ?? `wt-${id}`;
-        try {
-          execSync(`tmux has-session -t ${tmuxName} 2>/dev/null`);
-          session.restorable = true;
-        } catch {
-          const age = Date.now() - new Date(session.lastAccessed).getTime();
-          if (age > staleThreshold) {
-            staleIds.push(id);
+        if (session.shellMode === 'shell') {
+          session.restorable = !!session.lastCwd;
+        } else {
+          const tmuxName = session.tmuxSession ?? `wt-${id}`;
+          try {
+            execSync(`tmux has-session -t ${tmuxName} 2>/dev/null`);
+            session.restorable = true;
+          } catch {
+            const age = Date.now() - new Date(session.lastAccessed).getTime();
+            if (age > staleThreshold) {
+              staleIds.push(id);
+            }
+            session.restorable = false;
           }
-          session.restorable = false;
         }
       } else if (session.type === 'ssh') {
         session.restorable = !!session.sshConnectionId;
@@ -53,8 +57,15 @@ export class SessionManager {
     this.save();
   }
 
-  create(type: 'local' | 'ssh', name?: string, sshConnectionId?: string, tmuxSession?: string): Session {
+  create(
+    type: 'local' | 'ssh',
+    name?: string,
+    sshConnectionId?: string,
+    tmuxSession?: string,
+    shellMode?: 'shell' | 'tmux',
+  ): Session {
     this.counter++;
+    const resolvedMode = tmuxSession ? 'tmux' : (shellMode ?? 'shell');
     const session: Session = {
       id: uuidv4(),
       type,
@@ -63,6 +74,7 @@ export class SessionManager {
       lastAccessed: new Date().toISOString(),
       sshConnectionId,
       tmuxSession,
+      shellMode: type === 'local' ? resolvedMode : undefined,
     };
     this.sessions.set(session.id, session);
     this.save();
@@ -105,6 +117,14 @@ export class SessionManager {
     const session = this.sessions.get(id);
     if (session && session.lastCwd !== cwd) {
       session.lastCwd = cwd;
+      this.save();
+    }
+  }
+
+  setShellMode(id: string, mode: 'shell' | 'tmux'): void {
+    const session = this.sessions.get(id);
+    if (session && session.shellMode !== mode) {
+      session.shellMode = mode;
       this.save();
     }
   }

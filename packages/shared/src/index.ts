@@ -6,6 +6,7 @@ export interface Session {
   lastAccessed: string;
   sshConnectionId?: string;
   tmuxSession?: string;
+  shellMode?: 'shell' | 'tmux';
   lastCwd?: string;
   restorable?: boolean;
 }
@@ -29,11 +30,12 @@ export interface WsClientMessage {
 }
 
 export interface WsServerMessage {
-  type: 'output' | 'status' | 'titleChange';
+  type: 'output' | 'status' | 'titleChange' | 'modeChange';
   data?: string;
   state?: 'connected' | 'disconnected' | 'error';
   message?: string;
   title?: string;
+  shellMode?: 'shell' | 'tmux';
 }
 
 export interface HealthResponse {
@@ -73,6 +75,7 @@ export interface CreateSessionRequest {
   sshConnectionId?: string;
   sshPassword?: string;
   tmuxSession?: string;
+  shellMode?: 'shell' | 'tmux';
 }
 
 export interface TmuxSessionInfo {

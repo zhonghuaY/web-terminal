@@ -19,19 +19,21 @@ export function createSessionRouter(
   });
 
   router.post('/', (req: Request, res: Response) => {
-    const { type, name, sshConnectionId, tmuxSession } = req.body as CreateSessionRequest;
+    const { type, name, sshConnectionId, tmuxSession, shellMode } = req.body as CreateSessionRequest;
 
     if (!type || !['local', 'ssh'].includes(type)) {
       res.status(400).json({ error: 'Invalid session type' });
       return;
     }
 
-    const session = sessionManager.create(type, name, sshConnectionId, tmuxSession);
+    const session = sessionManager.create(type, name, sshConnectionId, tmuxSession, shellMode);
 
     if (type === 'local') {
       try {
         if (tmuxSession) {
           ptyAdapter.attachExternal(session.id, tmuxSession);
+        } else if (session.shellMode === 'shell') {
+          ptyAdapter.createPlainSession(session.id);
         } else {
           ptyAdapter.createSession(session.id);
         }
